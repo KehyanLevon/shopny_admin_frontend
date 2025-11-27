@@ -1,8 +1,8 @@
 import type { RouteObject } from "react-router-dom";
 import { LoginPage } from "../pages/auth/LoginPage";
-import { RegisterPage } from "../pages/auth/RegisterPage";
 import { DashboardPage } from "../pages/dashboard/DashboardPage";
 import { AdminLayout } from "../components/layout/AdminLayout";
+import { RequireAuth } from "../components/auth/RequireAuth";
 
 export const routes: RouteObject[] = [
   {
@@ -10,15 +10,13 @@ export const routes: RouteObject[] = [
     element: <LoginPage />,
   },
   {
-    path: "/register",
-    element: <RegisterPage />,
-  },
-  {
     path: "/",
     element: (
-      <AdminLayout>
-        <DashboardPage />
-      </AdminLayout>
+      <RequireAuth>
+        <AdminLayout>
+          <DashboardPage />
+        </AdminLayout>
+      </RequireAuth>
     ),
   },
 ];
