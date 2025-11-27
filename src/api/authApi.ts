@@ -1,40 +1,33 @@
-import axios from "axios";
-
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000/api";
-
-const client = axios.create({
-  baseURL: `${API_BASE_URL}/auth`,
-});
+import { http } from "./http";
 
 export interface LoginPayload {
   email: string;
   password: string;
 }
 
-export const authApi = {
-  client,
+export interface AuthUserDto {
+  id: number;
+  email: string;
+  name: string;
+  surname: string;
+  roles: string[];
+  verified: boolean;
+}
 
+export const authApi = {
   setAuthToken(token: string | null) {
     if (token) {
-      client.defaults.headers.common.Authorization = `Bearer ${token}`;
+      http.defaults.headers.common.Authorization = `Bearer ${token}`;
     } else {
-      delete client.defaults.headers.common.Authorization;
+      delete http.defaults.headers.common.Authorization;
     }
   },
 
   login(data: LoginPayload) {
-    return client.post<{ token: string }>("/login", data);
+    return http.post<{ token: string }>("/auth/login", data);
   },
 
   me() {
-    return client.get<{
-      id: number;
-      email: string;
-      name: string;
-      surname: string;
-      roles: string[];
-      verified: boolean;
-    }>("/me");
+    return http.get<AuthUserDto>("/auth/me");
   },
 };
