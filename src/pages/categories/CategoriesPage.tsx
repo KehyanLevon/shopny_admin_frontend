@@ -1,232 +1,315 @@
-import React, { useEffect, useState } from "react";
-import { Box, Button, Chip, Stack, Typography } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import { categoryApi, type CategoryDto } from "../../api/categoryApi";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Box,
+  Button,
+  Chip,
+  MenuItem,
+  Pagination,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import {
+  categoryApi,
+  type CategoryDto,
+  type CategoryPayload,
+} from "../../api/categoryApi";
 import { sectionApi, type SectionDto } from "../../api/sectionApi";
-import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
-import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 import {
   EntityFormDialog,
   type FormFieldConfig,
 } from "../../components/common/EntityFormDialog";
+import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
+import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 
-interface CategoryFormState {
-  title: string;
-  description: string;
-  sectionId: number | "";
-  isActive: boolean;
-}
+const ROWS_PER_PAGE = 10;
 
-export const CategoriesPage: React.FC = () => {
+const buildInitialForm = (category: CategoryDto | null): CategoryPayload => ({
+  title: category?.title ?? "",
+  description: category?.description ?? "",
+  isActive: category?.isActive ?? true,
+  sectionId: category?.sectionId,
+});
+
+export default function CategoriesPage() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [mode, setMode] = useState<"create" | "edit">("create");
-  const [editing, setEditing] = useState<CategoryDto | null>(null);
-  const [form, setForm] = useState<CategoryFormState>({
-    title: "",
-    description: "",
-    sectionId: "",
-    isActive: true,
-  });
-  const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<CategoryDto | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
+    "all"
+  );
 
-  async function loadData() {
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingCategory, setEditingCategory] = useState<CategoryDto | null>(
+    null
+  );
+  const [formValues, setFormValues] = useState<CategoryPayload>(
+    buildInitialForm(null)
+  );
+  const [formSubmitting, setFormSubmitting] = useState(false);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CategoryDto | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const loadSections = async () => {
+    const res: any = await sectionApi.getAll();
+    const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
+    setSections(items);
+  };
+
+  const loadCategories = async () => {
     setLoading(true);
     try {
-      const [catRes, secRes] = await Promise.all([
-        categoryApi.getAll(),
-        sectionApi.getAll(),
-      ]);
-      setCategories(catRes.data);
-      setSections(secRes.data);
+      let res: any;
+      if (selectedSectionId === "all") {
+        res = await categoryApi.getAll();
+      } else {
+        res = await categoryApi.getAll({ sectionId: selectedSectionId } as any);
+      }
+      const items: CategoryDto[] = res?.data?.items ?? res?.data ?? res ?? [];
+      setCategories(items);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadData();
+    void loadSections();
   }, []);
 
-  const openCreate = () => {
-    setMode("create");
-    setEditing(null);
-    setForm({
-      title: "",
-      description: "",
-      sectionId: "",
-      isActive: true,
-    });
-    setDialogOpen(true);
+  useEffect(() => {
+    void loadCategories();
+  }, [selectedSectionId]);
+
+  const handleOpenCreate = () => {
+    setFormMode("create");
+    setEditingCategory(null);
+    setFormValues(buildInitialForm(null));
+    setFormOpen(true);
   };
 
-  const openEdit = (category: CategoryDto) => {
-    setMode("edit");
-    setEditing(category);
-    setForm({
-      title: category.title,
-      description: category.description ?? "",
-      sectionId: category.sectionId ?? "",
-      isActive: category.isActive,
-    });
-    setDialogOpen(true);
+  const handleOpenEdit = (category: CategoryDto) => {
+    setFormMode("edit");
+    setEditingCategory(category);
+    setFormValues(buildInitialForm(category));
+    setFormOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!form.title.trim() || !form.sectionId) return;
-
-    setSaving(true);
+  const handleSubmitForm = async () => {
+    setFormSubmitting(true);
     try {
-      if (mode === "edit" && editing) {
-        const res = await categoryApi.update(editing.id, {
-          title: form.title,
-          description: form.description || null,
-          sectionId: form.sectionId as number,
-          isActive: form.isActive,
-        });
-        setCategories((prev) =>
-          prev.map((c) => (c.id === editing.id ? res.data : c))
-        );
-      } else {
-        const res = await categoryApi.create({
-          title: form.title,
-          description: form.description || null,
-          sectionId: form.sectionId as number,
-          isActive: form.isActive,
-        });
-        setCategories((prev) => [res.data, ...prev]);
+      const payload: CategoryPayload = {
+        ...formValues,
+        sectionId: formValues.sectionId ? null : Number(formValues.sectionId),
+      };
+
+      if (formMode === "create") {
+        await categoryApi.create(payload);
+      } else if (editingCategory) {
+        await categoryApi.update(editingCategory.id, payload);
       }
-      setDialogOpen(false);
+      setFormOpen(false);
+      await loadCategories();
     } finally {
-      setSaving(false);
+      setFormSubmitting(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteConfirm) return;
-    const id = deleteConfirm.id;
-    await categoryApi.delete(id);
-    setCategories((prev) => prev.filter((c) => c.id !== id));
-    setDeleteConfirm(null);
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await categoryApi.delete(deleteTarget.id);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      await loadCategories();
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
-  const sectionMap = new Map(sections.map((s) => [s.id, s.title]));
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
+    let data = categories;
+
+    if (term) {
+      data = data.filter((c) => {
+        return (
+          c.title.toLowerCase().includes(term) ||
+          (c.description ?? "").toLowerCase().includes(term) ||
+          c.slug.toLowerCase().includes(term)
+        );
+      });
+    }
+
+    return data;
+  }, [categories, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedRows = useMemo(
+    () =>
+      filtered.slice(
+        (currentPage - 1) * ROWS_PER_PAGE,
+        currentPage * ROWS_PER_PAGE
+      ),
+    [filtered, currentPage]
+  );
 
   const columns: CrudColumn<CategoryDto>[] = [
-    { id: "id", label: "ID", render: (row) => row.id },
-    { id: "title", label: "Title", render: (row) => row.title },
     {
-      id: "slug",
-      label: "Slug",
-      render: (row) => <Chip size="small" label={row.slug} />,
-    },
-    {
-      id: "isActive",
-      label: "Active",
-      render: (row) => (
-        <Chip
-          size="small"
-          label={row.isActive ? "Active" : "Inactive"}
-          color={row.isActive ? "success" : "default"}
-        />
-      ),
-    },
-    {
-      id: "section",
-      label: "Section",
-      render: (row) =>
-        row.sectionId
-          ? sectionMap.get(row.sectionId) ?? `#${row.sectionId}`
-          : "-",
-    },
-    {
-      id: "productsCount",
-      label: "Products",
-      render: (row) => row.productsCount,
+      id: "title",
+      label: "Title",
+      render: (row) => row.title,
     },
     {
       id: "description",
       label: "Description",
-      render: (row) => <TruncatedTextWithTooltip text={row.description} />,
+      render: (row) => (
+        <TruncatedTextWithTooltip text={row.description ?? ""} max={40} />
+      ),
     },
     {
-      id: "createdAt",
-      label: "Created",
+      id: "slug",
+      label: "Slug",
+      render: (row) => <Chip label={row.slug} size="small" />,
+    },
+    {
+      id: "section",
+      label: "Section",
+      render: (row) => {
+        const section = sections.find((s) => s.id === row.sectionId);
+        return section ? section.title : "-";
+      },
+    },
+    {
+      id: "isActive",
+      label: "Active",
       render: (row) =>
-        row.createdAt ? new Date(row.createdAt).toLocaleString() : "-",
+        row.isActive ? (
+          <Chip label="Active" color="success" size="small" />
+        ) : (
+          <Chip label="Inactive" color="default" size="small" />
+        ),
+    },
+    {
+      id: "productsCount",
+      label: "Products",
+      align: "right",
+      render: (row) => row.productsCount ?? 0,
     },
   ];
 
-  const fields: FormFieldConfig<CategoryFormState>[] = [
+  const formFields: FormFieldConfig<CategoryPayload>[] = [
     { name: "title", label: "Title", type: "text", required: true },
     { name: "description", label: "Description", type: "textarea" },
     {
       name: "sectionId",
       label: "Section",
       type: "select",
-      required: true,
       options: sections.map((s) => ({
         value: s.id,
         label: s.title,
       })),
+      required: false,
     },
     { name: "isActive", label: "Active", type: "switch" },
   ];
 
-  const isValid = form.title.trim().length > 0 && !!form.sectionId;
+  const isFormValid = formValues.title.trim().length > 0;
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={3}>
-        <Typography variant="h4">Categories</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={openCreate}
-        >
-          New Category
-        </Button>
+      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
+        <Typography variant="h5">Categories</Typography>
+        <Stack direction="row" gap={2} alignItems="center">
+          <TextField
+            size="small"
+            label="Search"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+          <TextField
+            select
+            size="small"
+            label="Section"
+            value={selectedSectionId}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSelectedSectionId(value === "all" ? "all" : Number(value));
+              setPage(1);
+            }}
+            sx={{ minWidth: 160 }}
+          >
+            <MenuItem value="all">All sections</MenuItem>
+            {sections.map((s) => (
+              <MenuItem key={s.id} value={s.id}>
+                {s.title}
+              </MenuItem>
+            ))}
+          </TextField>
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New Category
+          </Button>
+        </Stack>
       </Stack>
 
       <CrudTable
-        rows={categories}
+        rows={pagedRows}
         columns={columns}
         loading={loading}
-        emptyMessage="No categories yet."
-        onEdit={openEdit}
-        onDelete={(row) => setDeleteConfirm(row)}
+        emptyMessage="No categories."
+        onEdit={handleOpenEdit}
+        onDelete={(row) => {
+          setDeleteTarget(row);
+          setDeleteOpen(true);
+        }}
       />
 
-      <EntityFormDialog
-        open={dialogOpen}
-        mode={mode}
+      <Stack mt={2} alignItems="center">
+        <Pagination
+          count={pageCount}
+          page={currentPage}
+          onChange={(_, value) => setPage(value)}
+          color="primary"
+        />
+      </Stack>
+
+      <EntityFormDialog<CategoryPayload>
+        open={formOpen}
+        mode={formMode}
         title="Category"
-        fields={fields}
-        values={form}
-        onChange={setForm}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={handleSave}
-        submitting={saving}
-        isValid={isValid}
+        fields={formFields}
+        values={formValues}
+        onChange={setFormValues}
+        onClose={() => setFormOpen(false)}
+        onSubmit={handleSubmitForm}
+        submitting={formSubmitting}
+        isValid={isFormValid}
       />
 
       <ConfirmDeleteDialog
-        open={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        onConfirm={handleDelete}
+        open={deleteOpen}
         title="Delete category"
         description={
-          <>
-            Are you sure you want to delete category{" "}
-            <strong>{deleteConfirm?.title}</strong>?
-          </>
+          deleteTarget
+            ? `Are you sure you want to delete category "${deleteTarget.title}"?`
+            : ""
         }
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleteLoading}
       />
     </Box>
   );
-};
+}

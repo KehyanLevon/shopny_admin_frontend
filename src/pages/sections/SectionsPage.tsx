@@ -1,114 +1,134 @@
-import React, { useEffect, useState } from "react";
-import { Box, Button, Chip, Stack, Typography } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import { sectionApi, type SectionDto } from "../../api/sectionApi";
-import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
-import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Box,
+  Button,
+  Chip,
+  Pagination,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import {
+  sectionApi,
+  type SectionDto,
+  type SectionCreatePayload as SectionPayload,
+} from "../../api/sectionApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 import {
   EntityFormDialog,
   type FormFieldConfig,
 } from "../../components/common/EntityFormDialog";
+import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
+import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 
-interface SectionFormState {
-  title: string;
-  description: string;
-  isActive: boolean;
-}
+const ROWS_PER_PAGE = 10;
 
-export const SectionsPage: React.FC = () => {
+const buildInitialForm = (section: SectionDto | null): SectionPayload => ({
+  title: section?.title ?? "",
+  description: section?.description ?? "",
+  isActive: section?.isActive ?? true,
+});
+
+export default function SectionsPage() {
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [mode, setMode] = useState<"create" | "edit">("create");
-  const [editing, setEditing] = useState<SectionDto | null>(null);
-  const [form, setForm] = useState<SectionFormState>({
-    title: "",
-    description: "",
-    isActive: true,
-  });
-  const [saving, setSaving] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<SectionDto | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"create" | "edit">("create");
+  const [editingSection, setEditingSection] = useState<SectionDto | null>(null);
+  const [formValues, setFormValues] = useState<SectionPayload>(
+    buildInitialForm(null)
+  );
+  const [formSubmitting, setFormSubmitting] = useState(false);
 
-  async function loadSections() {
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<SectionDto | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  const loadSections = async () => {
     setLoading(true);
     try {
-      const res = await sectionApi.getAll();
-      setSections(res.data);
+      const res: any = await sectionApi.getAll();
+      // Поддерживаем оба варианта: обычный массив и PaginatedResponse
+      const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
+      setSections(items);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadSections();
+    void loadSections();
   }, []);
 
-  const openCreate = () => {
-    setMode("create");
-    setEditing(null);
-    setForm({
-      title: "",
-      description: "",
-      isActive: true,
-    });
-    setDialogOpen(true);
+  const handleOpenCreate = () => {
+    setFormMode("create");
+    setEditingSection(null);
+    setFormValues(buildInitialForm(null));
+    setFormOpen(true);
   };
 
-  const openEdit = (section: SectionDto) => {
-    setMode("edit");
-    setEditing(section);
-    setForm({
-      title: section.title,
-      description: section.description ?? "",
-      isActive: section.isActive,
-    });
-    setDialogOpen(true);
+  const handleOpenEdit = (section: SectionDto) => {
+    setFormMode("edit");
+    setEditingSection(section);
+    setFormValues(buildInitialForm(section));
+    setFormOpen(true);
   };
 
-  const handleSave = async () => {
-    if (!form.title.trim()) return;
-
-    setSaving(true);
+  const handleSubmitForm = async () => {
+    setFormSubmitting(true);
     try {
-      if (mode === "edit" && editing) {
-        const res = await sectionApi.update(editing.id, {
-          title: form.title,
-          description: form.description || null,
-          isActive: form.isActive,
-        });
-        setSections((prev) =>
-          prev.map((s) => (s.id === editing.id ? res.data : s))
-        );
-      } else {
-        const res = await sectionApi.create({
-          title: form.title,
-          description: form.description || null,
-          isActive: form.isActive,
-        });
-        setSections((prev) => [res.data, ...prev]);
+      if (formMode === "create") {
+        await sectionApi.create(formValues);
+      } else if (editingSection) {
+        await sectionApi.update(editingSection.id, formValues);
       }
-      setDialogOpen(false);
+      setFormOpen(false);
+      await loadSections();
     } finally {
-      setSaving(false);
+      setFormSubmitting(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!deleteConfirm) return;
-    const id = deleteConfirm.id;
-    await sectionApi.delete(id);
-    setSections((prev) => prev.filter((s) => s.id !== id));
-    setDeleteConfirm(null);
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await sectionApi.delete(deleteTarget.id);
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+      await loadSections();
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return sections;
+    return sections.filter((s) => {
+      return (
+        s.title.toLowerCase().includes(term) ||
+        (s.description ?? "").toLowerCase().includes(term) ||
+        s.slug.toLowerCase().includes(term)
+      );
+    });
+  }, [sections, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  const currentPage = Math.min(page, pageCount);
+  const pagedRows = useMemo(
+    () =>
+      filtered.slice(
+        (currentPage - 1) * ROWS_PER_PAGE,
+        currentPage * ROWS_PER_PAGE
+      ),
+    [filtered, currentPage]
+  );
+
   const columns: CrudColumn<SectionDto>[] = [
-    {
-      id: "id",
-      label: "ID",
-      render: (row) => row.id,
-    },
     {
       id: "title",
       label: "Title",
@@ -118,93 +138,106 @@ export const SectionsPage: React.FC = () => {
       id: "description",
       label: "Description",
       render: (row) => (
-        <TruncatedTextWithTooltip text={row.description} />
+        <TruncatedTextWithTooltip text={row.description ?? ""} max={40} />
       ),
     },
     {
       id: "slug",
       label: "Slug",
-      render: (row) => <Chip size="small" label={row.slug} />,
+      render: (row) => <Chip label={row.slug} size="small" />,
     },
     {
       id: "isActive",
       label: "Active",
-      render: (row) => (
-        <Chip
-          size="small"
-          label={row.isActive ? "Active" : "Inactive"}
-          color={row.isActive ? "success" : "default"}
-        />
-      ),
+      render: (row) =>
+        row.isActive ? (
+          <Chip label="Active" color="success" size="small" />
+        ) : (
+          <Chip label="Inactive" color="default" size="small" />
+        ),
     },
     {
       id: "categoriesCount",
       label: "Categories",
-      render: (row) => row.categoriesCount,
-    },
-    {
-      id: "createdAt",
-      label: "Created",
-      render: (row) =>
-        row.createdAt ? new Date(row.createdAt).toLocaleString() : "-",
+      align: "right",
+      render: (row) => row.categoriesCount ?? 0,
     },
   ];
 
-  const fields: FormFieldConfig<SectionFormState>[] = [
+  const formFields: FormFieldConfig<SectionPayload>[] = [
     { name: "title", label: "Title", type: "text", required: true },
     { name: "description", label: "Description", type: "textarea" },
     { name: "isActive", label: "Active", type: "switch" },
   ];
 
-  const isValid = form.title.trim().length > 0;
+  const isFormValid = formValues.title.trim().length > 0;
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={3}>
-        <Typography variant="h4">Sections</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={openCreate}
-        >
-          New Section
-        </Button>
+      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
+        <Typography variant="h5">Sections</Typography>
+        <Stack direction="row" gap={2}>
+          <TextField
+            size="small"
+            label="Search"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New Section
+          </Button>
+        </Stack>
       </Stack>
 
       <CrudTable
-        rows={sections}
+        rows={pagedRows}
         columns={columns}
         loading={loading}
-        emptyMessage="No sections yet."
-        onEdit={openEdit}
-        onDelete={(row) => setDeleteConfirm(row)}
+        emptyMessage="No sections."
+        onEdit={handleOpenEdit}
+        onDelete={(row) => {
+          setDeleteTarget(row);
+          setDeleteOpen(true);
+        }}
       />
 
-      <EntityFormDialog
-        open={dialogOpen}
-        mode={mode}
+      <Stack mt={2} alignItems="center">
+        <Pagination
+          count={pageCount}
+          page={currentPage}
+          onChange={(_, value) => setPage(value)}
+          color="primary"
+        />
+      </Stack>
+
+      <EntityFormDialog<SectionPayload>
+        open={formOpen}
+        mode={formMode}
         title="Section"
-        fields={fields}
-        values={form}
-        onChange={setForm}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={handleSave}
-        submitting={saving}
-        isValid={isValid}
+        fields={formFields}
+        values={formValues}
+        onChange={setFormValues}
+        onClose={() => setFormOpen(false)}
+        onSubmit={handleSubmitForm}
+        submitting={formSubmitting}
+        isValid={isFormValid}
       />
 
       <ConfirmDeleteDialog
-        open={!!deleteConfirm}
-        onClose={() => setDeleteConfirm(null)}
-        onConfirm={handleDelete}
+        open={deleteOpen}
         title="Delete section"
         description={
-          <>
-            Are you sure you want to delete section{" "}
-            <strong>{deleteConfirm?.title}</strong>?
-          </>
+          deleteTarget
+            ? `Are you sure you want to delete section "${deleteTarget.title}"?`
+            : ""
         }
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleConfirmDelete}
+        isLoading={deleteLoading}
       />
     </Box>
   );
-};
+}

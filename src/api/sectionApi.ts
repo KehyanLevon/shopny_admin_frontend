@@ -1,4 +1,5 @@
 import { http } from "./http";
+import type { PaginatedResponse } from "./types";
 
 export interface SectionDto {
   id: number;
@@ -11,26 +12,40 @@ export interface SectionDto {
   categoriesCount: number;
 }
 
-export interface SectionPayload {
+export interface SectionCreatePayload {
   title: string;
   description?: string | null;
   isActive?: boolean;
 }
 
+export interface SectionUpdatePayload {
+  title?: string;
+  description?: string | null;
+  isActive?: boolean;
+}
+
+export interface SectionListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
 export const sectionApi = {
-  getAll() {
-    return http.get<SectionDto[]>("/sections");
+  getAll(params?: SectionListParams) {
+    return http.get<PaginatedResponse<SectionDto>>("/sections", {
+      params,
+    });
   },
 
-  getById(id: number) {
+  getOne(id: number) {
     return http.get<SectionDto>(`/sections/${id}`);
   },
 
-  create(payload: SectionPayload) {
+  create(payload: SectionCreatePayload) {
     return http.post<SectionDto>("/sections", payload);
   },
 
-  update(id: number, payload: Partial<SectionPayload>) {
+  update(id: number, payload: SectionUpdatePayload) {
     return http.patch<SectionDto>(`/sections/${id}`, payload);
   },
 

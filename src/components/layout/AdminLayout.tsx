@@ -1,4 +1,3 @@
-// src/components/layout/AdminLayout.tsx
 import React from "react";
 import {
   AppBar,
@@ -15,7 +14,6 @@ import {
   Typography,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import DashboardIcon from "@mui/icons-material/Dashboard";
 import ViewListIcon from "@mui/icons-material/ViewList";
 import CategoryIcon from "@mui/icons-material/Category";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
@@ -36,7 +34,6 @@ export const AdminLayout: React.FC = () => {
   };
 
   const navItems = [
-    { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
     { label: "Sections", icon: <ViewListIcon />, path: "/sections" },
     { label: "Categories", icon: <CategoryIcon />, path: "/categories" },
     {

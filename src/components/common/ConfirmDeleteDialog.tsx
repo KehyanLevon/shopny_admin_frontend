@@ -15,6 +15,7 @@ interface ConfirmDeleteDialogProps {
   onConfirm: () => void;
   confirmLabel?: string;
   cancelLabel?: string;
+  isLoading: boolean;
 }
 
 export const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
