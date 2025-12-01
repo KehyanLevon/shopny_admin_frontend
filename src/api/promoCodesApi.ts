@@ -25,7 +25,7 @@ export interface PromoCodeDto {
 export interface PromoCodeListParams {
   page?: number;
   limit?: number;
-  search?: string;
+  q?: string;
   scopeType?: PromoScopeType;
   isActive?: 0 | 1;
   isExpired?: 0 | 1;

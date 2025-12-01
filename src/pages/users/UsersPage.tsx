@@ -27,7 +27,7 @@ export default function UsersPage() {
       const res = await usersApi.getAll({
         page: pageArg,
         limit: ROWS_PER_PAGE,
-        search: searchArg.trim() || undefined,
+        q: searchArg.trim() || undefined,
       });
 
       const data = res.data;

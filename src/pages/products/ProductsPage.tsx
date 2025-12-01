@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -11,7 +11,11 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { productApi, type ProductDto } from "../../api/productApi";
+import {
+  productApi,
+  type ProductDto,
+  type ProductListParams,
+} from "../../api/productApi";
 import { sectionApi, type SectionDto } from "../../api/sectionApi";
 import { categoryApi, type CategoryDto } from "../../api/categoryApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
@@ -27,8 +31,12 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // 🔹 фильтры / поиск / сортировка
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1); // сколько всего страниц приходит с бека
+  const [total, setTotal] = useState(0); // общее кол-во товаров (если пригодится)
+
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
     "all"
   );
@@ -37,6 +45,7 @@ export default function ProductsPage() {
   );
   const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">("none");
 
+  // 🔹 модалки
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingProduct, setEditingProduct] = useState<ProductDto | null>(null);
@@ -60,9 +69,49 @@ export default function ProductsPage() {
   const loadProducts = async () => {
     setLoading(true);
     try {
-      const res: any = await productApi.getAll();
-      const items: ProductDto[] = res?.data?.items ?? res?.data ?? res ?? [];
+      const params: ProductListParams = {
+        page,
+        limit: ROWS_PER_PAGE,
+      };
+
+      const term = search.trim();
+      if (term) {
+        // бек ожидает параметр q
+        params.q = term;
+      }
+
+      if (selectedSectionId !== "all") {
+        params.sectionId = selectedSectionId as number;
+      }
+
+      if (selectedCategoryId !== "all") {
+        params.categoryId = selectedCategoryId as number;
+      }
+
+      if (priceSort !== "none") {
+        params.sortBy = "price";
+        params.sortDir = priceSort;
+      }
+
+      const res: any = await productApi.getAll(params);
+      const data = res?.data ?? res;
+
+      const items: ProductDto[] = data?.items ?? data ?? [];
       setProducts(items);
+
+      // 🔹 берём мета-информацию с бека
+      if (typeof data?.total === "number") {
+        setTotal(data.total);
+      }
+      if (typeof data?.pages === "number") {
+        setPages(data.pages);
+      } else if (typeof data?.total === "number") {
+        // fallback, если pages не пришёл
+        setPages(Math.max(1, Math.ceil(data.total / ROWS_PER_PAGE)));
+      } else {
+        // совсем fallback
+        setPages(1);
+      }
     } finally {
       setLoading(false);
     }
@@ -71,8 +120,11 @@ export default function ProductsPage() {
   useEffect(() => {
     void loadSections();
     void loadCategories();
-    void loadProducts();
   }, []);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [page, search, selectedSectionId, selectedCategoryId, priceSort]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -104,66 +156,8 @@ export default function ProductsPage() {
     }
   };
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-
-    let data = products;
-
-    if (selectedSectionId !== "all") {
-      const sectionCategories = categories
-        .filter((c) => c.sectionId === selectedSectionId)
-        .map((c) => c.id);
-      data = data.filter((p) => sectionCategories.includes(p.categoryId));
-    }
-
-    if (selectedCategoryId !== "all") {
-      data = data.filter((p) => p.categoryId === selectedCategoryId);
-    }
-
-    if (term) {
-      data = data.filter((p) => {
-        return (
-          p.title.toLowerCase().includes(term) ||
-          (p.description ?? "").toLowerCase().includes(term) ||
-          p.slug.toLowerCase().includes(term)
-        );
-      });
-    }
-
-    if (priceSort !== "none") {
-      data = [...data].sort((a, b) => {
-        const priceA = a.discountPrice ?? a.price ?? 0;
-        const priceB = b.discountPrice ?? b.price ?? 0;
-        const numA = typeof priceA === "string" ? Number(priceA) : priceA;
-        const numB = typeof priceB === "string" ? Number(priceB) : priceB;
-
-        if (priceSort === "asc") {
-          return numA - numB;
-        }
-        return numB - numA;
-      });
-    }
-
-    return data;
-  }, [
-    products,
-    categories,
-    search,
-    selectedSectionId,
-    selectedCategoryId,
-    priceSort,
-  ]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
-  const currentPage = Math.min(page, pageCount);
-  const pagedRows = useMemo(
-    () =>
-      filtered.slice(
-        (currentPage - 1) * ROWS_PER_PAGE,
-        currentPage * ROWS_PER_PAGE
-      ),
-    [filtered, currentPage]
-  );
+  // ❌ УБРАНО: локальная фильтрация / сортировка / пагинация (filtered, pagedRows)
+  // Теперь products — это уже отфильтрованный/отсортированный список с нужной страницы.
 
   const columns: CrudColumn<ProductDto>[] = [
     {
@@ -220,7 +214,7 @@ export default function ProductsPage() {
       id: "status",
       label: "Status",
       render: (row) =>
-        row.isArchived ? (
+        row.isArchived ? ( // если такого поля нет — убери
           <Chip label="Archived" color="default" size="small" />
         ) : row.isActive ? (
           <Chip label="Active" color="success" size="small" />
@@ -240,14 +234,18 @@ export default function ProductsPage() {
       id: "imagesCount",
       label: "Images",
       align: "right",
-      render: (row) => row.imagesCount ?? 0,
+      render: (row) =>
+        // если на беке нет imagesCount — можно считать по длине массива
+        (row as any).imagesCount ?? (row.images ? row.images.length : 0),
     },
   ];
 
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Products</Typography>
+        <Typography variant="h5">
+          Products{total ? ` (${total})` : ""}
+        </Typography>
         <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
           <TextField
             size="small"
@@ -311,7 +309,8 @@ export default function ProductsPage() {
             value={priceSort}
             exclusive
             onChange={(_, value) => {
-              setPriceSort(value || "none");
+              const next = (value || "none") as "none" | "asc" | "desc";
+              setPriceSort(next);
               setPage(1);
             }}
           >
@@ -327,7 +326,7 @@ export default function ProductsPage() {
       </Stack>
 
       <CrudTable
-        rows={pagedRows}
+        rows={products} // ✅ теперь просто items с текущей страницы
         columns={columns}
         loading={loading}
         emptyMessage="No products."
@@ -340,8 +339,8 @@ export default function ProductsPage() {
 
       <Stack mt={2} alignItems="center">
         <Pagination
-          count={pageCount}
-          page={currentPage}
+          count={pages} // ✅ кол-во страниц с бека
+          page={page}
           onChange={(_, value) => setPage(value)}
           color="primary"
         />

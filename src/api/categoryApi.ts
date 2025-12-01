@@ -23,7 +23,7 @@ export interface CategoryPayload {
 export interface CategoryListParams {
   page?: number;
   limit?: number;
-  search?: string;
+  q?: string;
   sectionId?: number;
 }
 

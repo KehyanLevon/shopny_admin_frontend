@@ -14,7 +14,7 @@ export interface UserDto {
 export interface UserListParams {
   page?: number;
   limit?: number;
-  search?: string;
+  q?: string;
 }
 
 export const usersApi = {

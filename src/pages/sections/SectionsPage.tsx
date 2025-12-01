@@ -50,7 +50,15 @@ export default function SectionsPage() {
   const loadSections = async () => {
     setLoading(true);
     try {
-      const res: any = await sectionApi.getAll();
+      const params: any = {};
+      const term = search.trim();
+
+      if (term) {
+        params.search = term;
+        params.q = term;
+      }
+
+      const res: any = await sectionApi.getAll(params);
       const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
       setSections(items);
     } finally {
@@ -60,7 +68,7 @@ export default function SectionsPage() {
 
   useEffect(() => {
     void loadSections();
-  }, []);
+  }, [search]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -104,27 +112,15 @@ export default function SectionsPage() {
     }
   };
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return sections;
-    return sections.filter((s) => {
-      return (
-        s.title.toLowerCase().includes(term) ||
-        (s.description ?? "").toLowerCase().includes(term) ||
-        s.slug.toLowerCase().includes(term)
-      );
-    });
-  }, [sections, search]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  const pageCount = Math.max(1, Math.ceil(sections.length / ROWS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
   const pagedRows = useMemo(
     () =>
-      filtered.slice(
+      sections.slice(
         (currentPage - 1) * ROWS_PER_PAGE,
         currentPage * ROWS_PER_PAGE
       ),
-    [filtered, currentPage]
+    [sections, currentPage]
   );
 
   const columns: CrudColumn<SectionDto>[] = [

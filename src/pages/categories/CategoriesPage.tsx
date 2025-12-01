@@ -66,12 +66,19 @@ export default function CategoriesPage() {
   const loadCategories = async () => {
     setLoading(true);
     try {
-      let res: any;
-      if (selectedSectionId === "all") {
-        res = await categoryApi.getAll();
-      } else {
-        res = await categoryApi.getAll({ sectionId: selectedSectionId } as any);
+      const params: any = {};
+
+      if (selectedSectionId !== "all") {
+        params.sectionId = selectedSectionId;
       }
+
+      const term = search.trim();
+      if (term) {
+        params.search = term;
+        params.q = term;
+      }
+
+      const res: any = await categoryApi.getAll(params);
       const items: CategoryDto[] = res?.data?.items ?? res?.data ?? res ?? [];
       setCategories(items);
     } finally {
@@ -85,7 +92,7 @@ export default function CategoriesPage() {
 
   useEffect(() => {
     void loadCategories();
-  }, [selectedSectionId]);
+  }, [selectedSectionId, search]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -106,7 +113,7 @@ export default function CategoriesPage() {
     try {
       const payload: CategoryPayload = {
         ...formValues,
-        sectionId: formValues.sectionId ? null : Number(formValues.sectionId),
+        sectionId: formValues.sectionId ? Number(formValues.sectionId) : null,
       };
 
       if (formMode === "create") {
@@ -134,33 +141,15 @@ export default function CategoriesPage() {
     }
   };
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-
-    let data = categories;
-
-    if (term) {
-      data = data.filter((c) => {
-        return (
-          c.title.toLowerCase().includes(term) ||
-          (c.description ?? "").toLowerCase().includes(term) ||
-          c.slug.toLowerCase().includes(term)
-        );
-      });
-    }
-
-    return data;
-  }, [categories, search]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / ROWS_PER_PAGE));
+  const pageCount = Math.max(1, Math.ceil(categories.length / ROWS_PER_PAGE));
   const currentPage = Math.min(page, pageCount);
   const pagedRows = useMemo(
     () =>
-      filtered.slice(
+      categories.slice(
         (currentPage - 1) * ROWS_PER_PAGE,
         currentPage * ROWS_PER_PAGE
       ),
-    [filtered, currentPage]
+    [categories, currentPage]
   );
 
   const columns: CrudColumn<CategoryDto>[] = [

@@ -48,7 +48,7 @@ export interface ProductUpdatePayload {
 export interface ProductListParams {
   page?: number;
   limit?: number;
-  search?: string;
+  q?: string;
   sortBy?: "price" | "createdAt";
   sortDir?: "asc" | "desc";
   categoryId?: number;
