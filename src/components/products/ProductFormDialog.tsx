@@ -149,20 +149,30 @@ export const ProductFormDialog: React.FC<ProductFormDialogProps> = ({
 
     setSaving(true);
     try {
-      const payload = {
+      // Готовим общие поля, но в виде строк (как ждёт API)
+      const basePayload = {
         title: trimmedTitle,
         description: form.description || null,
-        price: priceNum,
-        discountPrice: hasDiscount ? discountNum : null,
+        price: priceNum.toString(), // <-- строка
+        discountPrice:
+          hasDiscount && discountNum !== null
+            ? discountNum.toString() // <-- строка
+            : null,
         categoryId: form.categoryId as number,
         isActive: form.isActive,
-        images: form.images,
+        images: form.images.length ? form.images : null,
       };
 
       let res;
       if (mode === "edit" && product) {
+        const payload: import("../../api/productApi").ProductUpdatePayload = {
+          ...basePayload,
+        };
         res = await productApi.update(product.id, payload);
       } else {
+        const payload: import("../../api/productApi").ProductCreatePayload = {
+          ...basePayload,
+        };
         res = await productApi.create(payload);
       }
 
