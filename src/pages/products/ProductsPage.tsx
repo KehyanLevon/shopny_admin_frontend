@@ -31,11 +31,10 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // 🔹 фильтры / поиск / сортировка
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [pages, setPages] = useState(1); // сколько всего страниц приходит с бека
-  const [total, setTotal] = useState(0); // общее кол-во товаров (если пригодится)
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
     "all"
@@ -45,7 +44,6 @@ export default function ProductsPage() {
   );
   const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">("none");
 
-  // 🔹 модалки
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingProduct, setEditingProduct] = useState<ProductDto | null>(null);
@@ -76,7 +74,6 @@ export default function ProductsPage() {
 
       const term = search.trim();
       if (term) {
-        // бек ожидает параметр q
         params.q = term;
       }
 
@@ -99,17 +96,14 @@ export default function ProductsPage() {
       const items: ProductDto[] = data?.items ?? data ?? [];
       setProducts(items);
 
-      // 🔹 берём мета-информацию с бека
       if (typeof data?.total === "number") {
         setTotal(data.total);
       }
       if (typeof data?.pages === "number") {
         setPages(data.pages);
       } else if (typeof data?.total === "number") {
-        // fallback, если pages не пришёл
         setPages(Math.max(1, Math.ceil(data.total / ROWS_PER_PAGE)));
       } else {
-        // совсем fallback
         setPages(1);
       }
     } finally {
@@ -155,9 +149,6 @@ export default function ProductsPage() {
       setDeleteLoading(false);
     }
   };
-
-  // ❌ УБРАНО: локальная фильтрация / сортировка / пагинация (filtered, pagedRows)
-  // Теперь products — это уже отфильтрованный/отсортированный список с нужной страницы.
 
   const columns: CrudColumn<ProductDto>[] = [
     {
@@ -214,7 +205,7 @@ export default function ProductsPage() {
       id: "status",
       label: "Status",
       render: (row) =>
-        row.isArchived ? ( // если такого поля нет — убери
+        row.isArchived ? (
           <Chip label="Archived" color="default" size="small" />
         ) : row.isActive ? (
           <Chip label="Active" color="success" size="small" />
@@ -235,7 +226,6 @@ export default function ProductsPage() {
       label: "Images",
       align: "right",
       render: (row) =>
-        // если на беке нет imagesCount — можно считать по длине массива
         (row as any).imagesCount ?? (row.images ? row.images.length : 0),
     },
   ];
@@ -243,9 +233,7 @@ export default function ProductsPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">
-          Products{total ? ` (${total})` : ""}
-        </Typography>
+        <Typography variant="h5">Products</Typography>
         <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
           <TextField
             size="small"
@@ -326,7 +314,7 @@ export default function ProductsPage() {
       </Stack>
 
       <CrudTable
-        rows={products} // ✅ теперь просто items с текущей страницы
+        rows={products}
         columns={columns}
         loading={loading}
         emptyMessage="No products."
@@ -339,7 +327,7 @@ export default function ProductsPage() {
 
       <Stack mt={2} alignItems="center">
         <Pagination
-          count={pages} // ✅ кол-во страниц с бека
+          count={pages}
           page={page}
           onChange={(_, value) => setPage(value)}
           color="primary"
