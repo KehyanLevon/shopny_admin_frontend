@@ -1,4 +1,5 @@
 import { http } from "./http";
+import type { PaginatedResponse } from "./types";
 
 export interface CategoryDto {
   id: number;
@@ -6,27 +7,34 @@ export interface CategoryDto {
   slug: string;
   description: string | null;
   isActive: boolean;
-  sectionId: number | null;
-  createdAt: string | null;
+  sectionId?: number;
+  createdAt: string;
   updatedAt: string | null;
   productsCount: number;
 }
 
 export interface CategoryPayload {
   title: string;
-  sectionId: number;
+  sectionId?: number | null;
   description?: string | null;
   isActive?: boolean;
 }
 
+export interface CategoryListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sectionId?: number;
+}
+
 export const categoryApi = {
-  getAll(sectionId?: number) {
-    return http.get<CategoryDto[]>("/categories", {
-      params: sectionId ? { sectionId } : undefined,
+  getAll(params?: CategoryListParams) {
+    return http.get<PaginatedResponse<CategoryDto>>("/categories", {
+      params,
     });
   },
 
-  getById(id: number) {
+  getOne(id: number) {
     return http.get<CategoryDto>(`/categories/${id}`);
   },
 
@@ -34,10 +42,7 @@ export const categoryApi = {
     return http.post<CategoryDto>("/categories", payload);
   },
 
-  update(
-    id: number,
-    payload: Partial<CategoryPayload>
-  ) {
+  update(id: number, payload: CategoryPayload) {
     return http.patch<CategoryDto>(`/categories/${id}`, payload);
   },
 

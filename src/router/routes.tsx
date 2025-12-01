@@ -1,8 +1,8 @@
 import type { RouteObject } from "react-router-dom";
 import { LoginPage } from "../pages/auth/LoginPage";
-import { SectionsPage } from "../pages/sections/SectionsPage";
-import { CategoriesPage } from "../pages/categories/CategoriesPage";
-import { ProductsPage } from "../pages/products/ProductsPage";
+import SectionsPage from "../pages/sections/SectionsPage";
+import CategoriesPage from "../pages/categories/CategoriesPage";
+import ProductsPage from "../pages/products/ProductsPage";
 import { AdminLayout } from "../components/layout/AdminLayout";
 import { RequireAuth } from "../components/auth/RequireAuth";
 

@@ -186,15 +186,14 @@ export const ProductFormDialog: React.FC<ProductFormDialogProps> = ({
       submitting={saving}
       isValid={isValid}
     >
-      {mode === "edit" && product && (
-        <ProductImagesManager
-          productId={product.id}
-          images={form.images}
-          onChange={(updated) =>
-            setForm((prev) => ({ ...prev, images: updated }))
-          }
-        />
-      )}
+      {/* ТЕПЕРЬ блок картинок доступен и в create, и в edit */}
+      <ProductImagesManager
+        productId={product?.id ?? null}
+        images={form.images}
+        onChange={(updated) =>
+          setForm((prev) => ({ ...prev, images: updated }))
+        }
+      />
     </EntityFormDialog>
   );
 };
