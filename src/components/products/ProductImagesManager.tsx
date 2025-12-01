@@ -11,7 +11,7 @@ import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import React, { useRef, useState } from "react";
 
 interface ProductImagesManagerProps {
-  productId: number | null; // оставляем для совместимости, но внутри не используем
+  productId: number | null;
   images: string[];
   onChange: (updated: string[]) => void;
 }

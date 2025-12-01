@@ -156,7 +156,7 @@ export const ProductFormDialog: React.FC<ProductFormDialogProps> = ({
         discountPrice: hasDiscount ? discountNum : null,
         categoryId: form.categoryId as number,
         isActive: form.isActive,
-        images: form.images, // <-- сюда уходит массив data-url'ов
+        images: form.images,
       };
 
       let res;

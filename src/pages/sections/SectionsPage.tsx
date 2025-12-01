@@ -51,7 +51,6 @@ export default function SectionsPage() {
     setLoading(true);
     try {
       const res: any = await sectionApi.getAll();
-      // Поддерживаем оба варианта: обычный массив и PaginatedResponse
       const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
       setSections(items);
     } finally {
