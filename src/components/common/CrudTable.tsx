@@ -24,8 +24,8 @@ interface CrudTableProps<T> {
   columns: CrudColumn<T>[];
   loading?: boolean;
   emptyMessage?: string;
-  onEdit: (row: T) => void;
-  onDelete: (row: T) => void;
+  onEdit?: (row: T) => void;
+  onDelete?: (row: T) => void;
 }
 
 export function CrudTable<T extends { id: number | string }>({
@@ -36,6 +36,8 @@ export function CrudTable<T extends { id: number | string }>({
   onEdit,
   onDelete,
 }: CrudTableProps<T>) {
+  const hasActions = !!onEdit || !!onDelete;
+
   if (loading) {
     return <Typography>Loading...</Typography>;
   }
@@ -53,7 +55,7 @@ export function CrudTable<T extends { id: number | string }>({
               {col.label}
             </TableCell>
           ))}
-          <TableCell align="right">Actions</TableCell>
+          {hasActions && <TableCell align="right">Actions</TableCell>}
         </TableRow>
       </TableHead>
       <TableBody>
@@ -64,18 +66,24 @@ export function CrudTable<T extends { id: number | string }>({
                 {col.render(row)}
               </TableCell>
             ))}
-            <TableCell align="right">
-              <Tooltip title="Edit">
-                <IconButton onClick={() => onEdit(row)}>
-                  <EditIcon />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Delete">
-                <IconButton color="error" onClick={() => onDelete(row)}>
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
-            </TableCell>
+            {hasActions && (
+              <TableCell align="right">
+                {onEdit && (
+                  <Tooltip title="Edit">
+                    <IconButton onClick={() => onEdit(row)}>
+                      <EditIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                {onDelete && (
+                  <Tooltip title="Delete">
+                    <IconButton color="error" onClick={() => onDelete(row)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

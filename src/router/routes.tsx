@@ -5,6 +5,7 @@ import CategoriesPage from "../pages/categories/CategoriesPage";
 import ProductsPage from "../pages/products/ProductsPage";
 import { AdminLayout } from "../components/layout/AdminLayout";
 import { RequireAuth } from "../components/auth/RequireAuth";
+import UsersPage from "../pages/users/UsersPage";
 
 export const routes: RouteObject[] = [
   {
@@ -22,6 +23,7 @@ export const routes: RouteObject[] = [
       { path: "sections", element: <SectionsPage /> },
       { path: "categories", element: <CategoriesPage /> },
       { path: "products", element: <ProductsPage /> },
+      { path: "users", element: <UsersPage /> },
     ],
   },
 ];

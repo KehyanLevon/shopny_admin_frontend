@@ -149,15 +149,12 @@ export const ProductFormDialog: React.FC<ProductFormDialogProps> = ({
 
     setSaving(true);
     try {
-      // Готовим общие поля, но в виде строк (как ждёт API)
       const basePayload = {
         title: trimmedTitle,
         description: form.description || null,
-        price: priceNum.toString(), // <-- строка
+        price: priceNum.toString(),
         discountPrice:
-          hasDiscount && discountNum !== null
-            ? discountNum.toString() // <-- строка
-            : null,
+          hasDiscount && discountNum !== null ? discountNum.toString() : null,
         categoryId: form.categoryId as number,
         isActive: form.isActive,
         images: form.images.length ? form.images : null,
@@ -196,7 +193,6 @@ export const ProductFormDialog: React.FC<ProductFormDialogProps> = ({
       submitting={saving}
       isValid={isValid}
     >
-      {/* ТЕПЕРЬ блок картинок доступен и в create, и в edit */}
       <ProductImagesManager
         productId={product?.id ?? null}
         images={form.images}
