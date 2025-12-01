@@ -9,10 +9,9 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import AddPhotoAlternateIcon from "@mui/icons-material/AddPhotoAlternate";
 import React, { useRef, useState } from "react";
-import { productApi } from "../../api/productApi";
 
 interface ProductImagesManagerProps {
-  productId: number | null;
+  productId: number | null; // оставляем для совместимости, но внутри не используем
   images: string[];
   onChange: (updated: string[]) => void;
 }
@@ -20,15 +19,26 @@ interface ProductImagesManagerProps {
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
-const buildImageUrl = (path: string) => {
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
+const buildImageUrl = (src: string) => {
+  if (src.startsWith("data:")) {
+    return src;
   }
-  return `${API_BASE_URL}${path}`;
+
+  if (src.startsWith("http://") || src.startsWith("https://")) {
+    return src;
+  }
+  return `${API_BASE_URL}${src}`;
 };
 
+const fileToDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+
 export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
-  productId,
   images,
   onChange,
 }) => {
@@ -42,31 +52,24 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files || !productId) return;
-
-    const fd = new FormData();
-    Array.from(files).forEach((f) => fd.append("images[]", f));
+    if (!files || files.length === 0) return;
 
     setUploading(true);
     try {
-      const res = await productApi.uploadImages(productId, fd);
-      onChange(res.data.images);
+      const fileArray = Array.from(files);
+      const dataUrls = await Promise.all(fileArray.map(fileToDataUrl));
+      onChange([...images, ...dataUrls]);
     } finally {
       setUploading(false);
       e.target.value = "";
     }
   };
 
-  const handleDelete = async (path: string) => {
-    if (!productId) return;
+  const handleDelete = (path: string) => {
     setDeleting(path);
-
-    try {
-      const res = await productApi.deleteImage(productId, path);
-      onChange(res.data.images);
-    } finally {
-      setDeleting(null);
-    }
+    const updated = images.filter((img) => img !== path);
+    onChange(updated);
+    setDeleting(null);
   };
 
   return (
@@ -80,7 +83,7 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
           variant="outlined"
           startIcon={<AddPhotoAlternateIcon />}
           onClick={handleSelectFiles}
-          disabled={!productId || uploading}
+          disabled={uploading}
         >
           {uploading ? "Uploading..." : "Upload images"}
         </Button>
