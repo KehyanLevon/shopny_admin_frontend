@@ -18,6 +18,7 @@ import ViewListIcon from "@mui/icons-material/ViewList";
 import CategoryIcon from "@mui/icons-material/Category";
 import Inventory2Icon from "@mui/icons-material/Inventory2";
 import GroupIcon from "@mui/icons-material/Group";
+import BarcodeReaderIcon from "@mui/icons-material/BarcodeReader";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
@@ -46,6 +47,11 @@ export const AdminLayout: React.FC = () => {
       label: "Users",
       icon: <GroupIcon />,
       path: "/users",
+    },
+    {
+      label: "PromoCodes",
+      icon: <BarcodeReaderIcon />,
+      path: "/promocodes",
     },
   ];
 
