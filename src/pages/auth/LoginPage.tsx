@@ -27,21 +27,40 @@ export const LoginPage: React.FC = () => {
 
   const from = location.state?.from?.pathname ?? "/";
 
+  const emailTrimmed = email.trim();
+  const passwordTrimmed = password;
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  const isEmailValid = emailTrimmed.length > 0 && emailRegex.test(emailTrimmed);
+  const isPasswordValid = passwordTrimmed.length >= 8;
+
+  const submitting = localLoading || globalLoading;
+  const isFormValid = isEmailValid && isPasswordValid;
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!isFormValid) {
+      setError(
+        "Please enter a valid email and a password of at least 8 characters."
+      );
+      return;
+    }
+
     setLocalLoading(true);
 
     try {
-      await login(email, password);
+      await login(emailTrimmed, passwordTrimmed);
       navigate(from, { replace: true });
     } catch (err) {
       if (err instanceof Error && err.message === "ACCESS_DENIED") {
         setError("You don't have access to the admin panel.");
       } else if (axios.isAxiosError(err)) {
+        const data = err.response?.data as any;
         const msg =
-          (err.response?.data as any)?.error ??
-          "Incorrect email or password.";
+          data?.error ?? data?.message ?? "Incorrect email or password.";
         setError(msg);
       } else {
         setError("Error logging in.");
@@ -50,8 +69,6 @@ export const LoginPage: React.FC = () => {
       setLocalLoading(false);
     }
   }
-
-  const submitting = localLoading || globalLoading;
 
   return (
     <AuthContainer>
@@ -76,6 +93,12 @@ export const LoginPage: React.FC = () => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              error={emailTrimmed.length > 0 && !isEmailValid}
+              helperText={
+                emailTrimmed.length > 0 && !isEmailValid
+                  ? "Enter a valid email address."
+                  : " "
+              }
             />
 
             <TextField
@@ -86,6 +109,12 @@ export const LoginPage: React.FC = () => {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              error={passwordTrimmed.length > 0 && !isPasswordValid}
+              helperText={
+                passwordTrimmed.length > 0 && !isPasswordValid
+                  ? "Password must be at least 8 characters."
+                  : " "
+              }
             />
 
             <Button
@@ -93,7 +122,7 @@ export const LoginPage: React.FC = () => {
               fullWidth
               variant="contained"
               sx={{ mt: 2 }}
-              disabled={submitting}
+              disabled={submitting || !isFormValid}
             >
               {submitting ? "Logging in..." : "Log in"}
             </Button>

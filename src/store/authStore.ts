@@ -15,9 +15,9 @@ interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   initialized: boolean;
-  initFromStorage: () => Promise<void>;
+  initFromCookies: (force?: boolean) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const isAdmin = (user: AuthUser | null) =>
@@ -29,32 +29,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   initialized: false,
 
-  async initFromStorage() {
-    if (get().initialized) return;
+  async initFromCookies(force: boolean = false) {
+    const { initialized } = get();
+    if (initialized && !force) return;
 
-    const storedToken = localStorage.getItem("accessToken");
-    if (!storedToken) {
-      set({ initialized: true });
-      return;
-    }
-
-    authApi.setAuthToken(storedToken);
-    set({ token: storedToken, loading: true });
+    set({ loading: true });
 
     try {
       const res = await authApi.me();
       const user = res.data;
 
       if (!isAdmin(user)) {
-        localStorage.removeItem("accessToken");
-        authApi.setAuthToken(null);
         set({ token: null, user: null });
       } else {
-        set({ user });
+        set({ token: null, user });
       }
     } catch {
-      localStorage.removeItem("accessToken");
-      authApi.setAuthToken(null);
       set({ token: null, user: null });
     } finally {
       set({ loading: false, initialized: true });
@@ -65,17 +55,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true });
     try {
       const res = await authApi.login({ email, password });
-      const token = res.data.token;
 
-      localStorage.setItem("accessToken", token);
-      authApi.setAuthToken(token);
+      const token = (res.data as any)?.token ?? null;
 
       const meRes = await authApi.me();
-      const user = meRes.data;
+      const user = meRes.data as AuthUser;
 
       if (!isAdmin(user)) {
-        localStorage.removeItem("accessToken");
-        authApi.setAuthToken(null);
+        try {
+          if (authApi.logout) {
+            await authApi.logout();
+          }
+        } catch {}
+
         set({ token: null, user: null });
         throw new Error("ACCESS_DENIED");
       }
@@ -86,9 +78,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  logout() {
-    localStorage.removeItem("accessToken");
-    authApi.setAuthToken(null);
+  async logout() {
+    try {
+      if (authApi.logout) {
+        await authApi.logout();
+      }
+    } catch {}
+
     set({ token: null, user: null });
   },
 }));

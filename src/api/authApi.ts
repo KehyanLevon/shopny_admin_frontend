@@ -15,13 +15,7 @@ export interface AuthUserDto {
 }
 
 export const authApi = {
-  setAuthToken(token: string | null) {
-    if (token) {
-      http.defaults.headers.common.Authorization = `Bearer ${token}`;
-    } else {
-      delete http.defaults.headers.common.Authorization;
-    }
-  },
+  setAuthToken(_token: string | null) {},
 
   login(data: LoginPayload) {
     return http.post<{ token: string }>("/auth/login", data);
@@ -29,5 +23,9 @@ export const authApi = {
 
   me() {
     return http.get<AuthUserDto>("/auth/me");
+  },
+
+  logout() {
+    return http.post("/auth/logout");
   },
 };
