@@ -11,11 +11,10 @@ export interface AuthUser {
 }
 
 interface AuthState {
-  token: string | null;
   user: AuthUser | null;
   loading: boolean;
   initialized: boolean;
-  initFromCookies: (force?: boolean) => Promise<void>;
+  initFromCookies: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -24,28 +23,27 @@ const isAdmin = (user: AuthUser | null) =>
   !!user?.roles?.includes("ROLE_ADMIN");
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  token: null,
   user: null,
   loading: false,
   initialized: false,
 
-  async initFromCookies(force: boolean = false) {
+  async initFromCookies() {
     const { initialized } = get();
-    if (initialized && !force) return;
+    if (initialized) return;
 
     set({ loading: true });
 
     try {
       const res = await authApi.me();
-      const user = res.data;
+      const user = res.data as AuthUser;
 
       if (!isAdmin(user)) {
-        set({ token: null, user: null });
+        set({ user: null });
       } else {
-        set({ token: null, user });
+        set({ user });
       }
     } catch {
-      set({ token: null, user: null });
+      set({ user: null });
     } finally {
       set({ loading: false, initialized: true });
     }
@@ -54,10 +52,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   async login(email: string, password: string) {
     set({ loading: true });
     try {
-      const res = await authApi.login({ email, password });
-
-      const token = (res.data as any)?.token ?? null;
-
+      await authApi.login({ email, password });
       const meRes = await authApi.me();
       const user = meRes.data as AuthUser;
 
@@ -68,23 +63,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
         } catch {}
 
-        set({ token: null, user: null });
+        set({ user: null });
         throw new Error("ACCESS_DENIED");
       }
 
-      set({ token, user });
+      set({ user, initialized: true });
     } finally {
       set({ loading: false });
     }
   },
 
   async logout() {
+    set({ loading: true });
     try {
       if (authApi.logout) {
         await authApi.logout();
       }
-    } catch {}
-
-    set({ token: null, user: null });
+    } catch {
+    } finally {
+      set({ user: null, initialized: false, loading: false });
+    }
   },
 }));
