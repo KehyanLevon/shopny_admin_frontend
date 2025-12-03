@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -8,6 +8,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import axios from "axios";
 import {
   sectionApi,
   type SectionDto,
@@ -29,11 +30,21 @@ const buildInitialForm = (section: SectionDto | null): SectionPayload => ({
   isActive: section?.isActive ?? true,
 });
 
+type SectionFormErrors = Partial<
+  Record<keyof SectionPayload | "global", string[]>
+>;
+
+type SectionTouched = Partial<Record<keyof SectionPayload, boolean>>;
+
 export default function SectionsPage() {
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
+
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  const [pagesCount, setPagesCount] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -41,7 +52,12 @@ export default function SectionsPage() {
   const [formValues, setFormValues] = useState<SectionPayload>(
     buildInitialForm(null)
   );
+  const [initialFormValues, setInitialFormValues] = useState<SectionPayload>(
+    buildInitialForm(null)
+  );
   const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formErrors, setFormErrors] = useState<SectionFormErrors>({});
+  const [touched, setTouched] = useState<SectionTouched>({});
 
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<SectionDto | null>(null);
@@ -50,42 +66,132 @@ export default function SectionsPage() {
   const loadSections = async () => {
     setLoading(true);
     try {
-      const params: any = {};
       const term = search.trim();
+      const params = {
+        page,
+        limit: ROWS_PER_PAGE,
+        q: term || undefined,
+      };
 
-      if (term) {
-        params.search = term;
-        params.q = term;
-      }
+      const res = await sectionApi.getAll(params);
+      const data = res.data;
 
-      const res: any = await sectionApi.getAll(params);
-      const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
-      setSections(items);
+      setSections(data.items ?? []);
+      setPagesCount(data.pages ?? 1);
+      setTotal(data.total ?? data.items?.length ?? 0);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    const id = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 400);
+
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
+
+  useEffect(() => {
     void loadSections();
-  }, [search]);
+  }, [page, search]);
+
+  const validateSection = (values: SectionPayload): SectionFormErrors => {
+    const errors: SectionFormErrors = {};
+
+    const title = values.title?.trim() ?? "";
+    if (!title) {
+      errors.title = ["Title is required."];
+    } else if (title.length < 2) {
+      errors.title = ["Title must be at least 2 characters long."];
+    } else if (title.length > 255) {
+      errors.title = ["Title must not be longer than 255 characters."];
+    }
+
+    const description = values.description ?? "";
+    if (description.length > 5000) {
+      errors.description = [
+        "Description must not be longer than 5000 characters.",
+      ];
+    }
+
+    return errors;
+  };
 
   const handleOpenCreate = () => {
+    const init = buildInitialForm(null);
     setFormMode("create");
     setEditingSection(null);
-    setFormValues(buildInitialForm(null));
+    setFormValues(init);
+    setInitialFormValues(init);
+    setFormErrors({});
+    setTouched({});
     setFormOpen(true);
   };
 
   const handleOpenEdit = (section: SectionDto) => {
+    const init = buildInitialForm(section);
     setFormMode("edit");
     setEditingSection(section);
-    setFormValues(buildInitialForm(section));
+    setFormValues(init);
+    setInitialFormValues(init);
+    setFormErrors({});
+    setTouched({});
     setFormOpen(true);
   };
 
+  const handleFormChange = (values: SectionPayload) => {
+    setFormValues(values);
+
+    const allErrors = validateSection(values);
+    setFormErrors((prev) => {
+      const next: SectionFormErrors = { ...prev };
+      (Object.keys(touched) as (keyof SectionPayload)[]).forEach((key) => {
+        if (touched[key]) {
+          if (allErrors[key]?.length) {
+            next[key] = allErrors[key];
+          } else {
+            delete next[key];
+          }
+        }
+      });
+      return next;
+    });
+  };
+
+  const handleFieldBlur = (name: keyof SectionPayload) => {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const allErrors = validateSection(formValues);
+
+    setFormErrors((prev) => {
+      const next: SectionFormErrors = { ...prev };
+
+      if (allErrors[name]?.length) {
+        next[name] = allErrors[name];
+      } else {
+        delete next[name];
+      }
+
+      return next;
+    });
+  };
+
   const handleSubmitForm = async () => {
+    const localErrors = validateSection(formValues);
+
+    if (Object.keys(localErrors).length > 0) {
+      setFormErrors(localErrors);
+      setTouched({
+        title: true,
+        description: true,
+        isActive: true,
+      });
+      return;
+    }
+
     setFormSubmitting(true);
+    setFormErrors({});
     try {
       if (formMode === "create") {
         await sectionApi.create(formValues);
@@ -94,6 +200,29 @@ export default function SectionsPage() {
       }
       setFormOpen(false);
       await loadSections();
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        const { status, data } = error.response as {
+          status: number;
+          data: any;
+        };
+
+        if (status === 422 || status === 400) {
+          const backendErrors: SectionFormErrors = data?.errors ?? {};
+          if (!backendErrors.global && data?.message) {
+            backendErrors.global = [data.message];
+          }
+          setFormErrors(backendErrors);
+        } else {
+          setFormErrors({
+            global: ["Unexpected error. Please try again later."],
+          });
+        }
+      } else {
+        setFormErrors({
+          global: ["Unexpected error. Please try again later."],
+        });
+      }
     } finally {
       setFormSubmitting(false);
     }
@@ -112,17 +241,6 @@ export default function SectionsPage() {
     }
   };
 
-  const pageCount = Math.max(1, Math.ceil(sections.length / ROWS_PER_PAGE));
-  const currentPage = Math.min(page, pageCount);
-  const pagedRows = useMemo(
-    () =>
-      sections.slice(
-        (currentPage - 1) * ROWS_PER_PAGE,
-        currentPage * ROWS_PER_PAGE
-      ),
-    [sections, currentPage]
-  );
-
   const columns: CrudColumn<SectionDto>[] = [
     {
       id: "title",
@@ -135,11 +253,6 @@ export default function SectionsPage() {
       render: (row) => (
         <TruncatedTextWithTooltip text={row.description ?? ""} max={40} />
       ),
-    },
-    {
-      id: "slug",
-      label: "Slug",
-      render: (row) => <Chip label={row.slug} size="small" />,
     },
     {
       id: "isActive",
@@ -161,11 +274,21 @@ export default function SectionsPage() {
 
   const formFields: FormFieldConfig<SectionPayload>[] = [
     { name: "title", label: "Title", type: "text", required: true },
-    { name: "description", label: "Description", type: "textarea" },
+    {
+      name: "description",
+      label: "Description",
+      type: "textarea",
+      rows: 4,
+      maxLength: 5000,
+      showCounter: true,
+    },
     { name: "isActive", label: "Active", type: "switch" },
   ];
 
-  const isFormValid = formValues.title.trim().length > 0;
+  const isFormValid = Object.keys(validateSection(formValues)).length === 0;
+
+  const hasChanges =
+    JSON.stringify(formValues) !== JSON.stringify(initialFormValues);
 
   return (
     <Box>
@@ -175,10 +298,9 @@ export default function SectionsPage() {
           <TextField
             size="small"
             label="Search"
-            value={search}
+            value={searchInput}
             onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
+              setSearchInput(e.target.value);
             }}
           />
           <Button variant="contained" onClick={handleOpenCreate}>
@@ -188,7 +310,7 @@ export default function SectionsPage() {
       </Stack>
 
       <CrudTable
-        rows={pagedRows}
+        rows={sections}
         columns={columns}
         loading={loading}
         emptyMessage="No sections."
@@ -201,11 +323,14 @@ export default function SectionsPage() {
 
       <Stack mt={2} alignItems="center">
         <Pagination
-          count={pageCount}
-          page={currentPage}
+          count={pagesCount}
+          page={page}
           onChange={(_, value) => setPage(value)}
           color="primary"
         />
+        <Typography variant="body2" color="text.secondary" mt={1}>
+          Total: {total}
+        </Typography>
       </Stack>
 
       <EntityFormDialog<SectionPayload>
@@ -214,11 +339,13 @@ export default function SectionsPage() {
         title="Section"
         fields={formFields}
         values={formValues}
-        onChange={setFormValues}
+        onChange={handleFormChange}
         onClose={() => setFormOpen(false)}
         onSubmit={handleSubmitForm}
         submitting={formSubmitting}
-        isValid={isFormValid}
+        isValid={isFormValid && hasChanges}
+        errors={formErrors}
+        onFieldBlur={handleFieldBlur}
       />
 
       <ConfirmDeleteDialog
