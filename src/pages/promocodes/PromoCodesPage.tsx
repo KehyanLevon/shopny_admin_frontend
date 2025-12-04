@@ -1,14 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Pagination,
+  Popover,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import {
   promoCodesApi,
   type PromoCodeDto,
@@ -66,6 +69,12 @@ export default function PromoCodesPage() {
     "" | "expired" | "not-expired"
   >("");
 
+  // NEW: сортировка
+  const [sortBy, setSortBy] = useState<"createdAt" | "startsAt" | "expiresAt">(
+    "createdAt"
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(ROWS_PER_PAGE);
@@ -77,6 +86,18 @@ export default function PromoCodesPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PromoCodeDto | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // NEW: Popover
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
 
   const loadSections = async () => {
     const res: any = await sectionApi.getAll();
@@ -103,6 +124,8 @@ export default function PromoCodesPage() {
         page,
         limit: ROWS_PER_PAGE,
         search: search.trim() || undefined,
+        sortBy,
+        sortDir,
       };
 
       if (scopeFilter !== "all-scopes") {
@@ -148,7 +171,15 @@ export default function PromoCodesPage() {
 
   useEffect(() => {
     void loadPromoCodes();
-  }, [page, search, scopeFilter, isActiveFilter, expiredFilter]);
+  }, [
+    page,
+    search,
+    scopeFilter,
+    isActiveFilter,
+    expiredFilter,
+    sortBy,
+    sortDir,
+  ]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
@@ -217,6 +248,11 @@ export default function PromoCodesPage() {
         ),
     },
     {
+      id: "startsAt",
+      label: "Starts at",
+      render: (row) => formatDateTime(row.startsAt ?? null),
+    },
+    {
       id: "expiresAt",
       label: "Expires at",
       render: (row) => {
@@ -232,21 +268,63 @@ export default function PromoCodesPage() {
         );
       },
     },
+    {
+      id: "createdAt",
+      label: "Created at",
+      render: (row) => formatDateTime((row as any).createdAt ?? null),
+    },
   ];
+
+  const handleClearFilters = () => {
+    setScopeFilter("all-scopes");
+    setIsActiveFilter("");
+    setExpiredFilter("");
+    setSortBy("createdAt");
+    setSortDir("desc");
+    setPage(1);
+  };
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Promo codes</Typography>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        {/* Search вместо заголовка */}
+        <TextField
+          size="small"
+          label="Search"
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+          }}
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+        />
+
         <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
-          <TextField
-            size="small"
-            label="Search"
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-            }}
-          />
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New promo code
+          </Button>
+        </Stack>
+      </Stack>
+
+      {/* Popover с фильтрами и сортировкой */}
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={280}>
+          <Typography variant="subtitle1">Filters & sorting</Typography>
 
           <TextField
             select
@@ -258,7 +336,6 @@ export default function PromoCodesPage() {
               setScopeFilter(val);
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all-scopes">All scopes</MenuItem>
             <MenuItem value="all">All products</MenuItem>
@@ -277,7 +354,6 @@ export default function PromoCodesPage() {
               setIsActiveFilter(val);
               setPage(1);
             }}
-            sx={{ minWidth: 140 }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="active">Only active</MenuItem>
@@ -294,18 +370,48 @@ export default function PromoCodesPage() {
               setExpiredFilter(val);
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="not-expired">Only valid / no date</MenuItem>
             <MenuItem value="expired">Only expired</MenuItem>
           </TextField>
 
-          <Button variant="contained" onClick={handleOpenCreate}>
-            New promo code
+          <TextField
+            select
+            size="small"
+            label="Sort by"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(
+                e.target.value as "createdAt" | "startsAt" | "expiresAt"
+              );
+              setPage(1);
+            }}
+          >
+            <MenuItem value="createdAt">Created at</MenuItem>
+            <MenuItem value="startsAt">Starts at</MenuItem>
+            <MenuItem value="expiresAt">Expires at</MenuItem>
+          </TextField>
+
+          <TextField
+            select
+            size="small"
+            label="Sort direction"
+            value={sortDir}
+            onChange={(e) => {
+              setSortDir(e.target.value as "asc" | "desc");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="desc">Descending</MenuItem>
+            <MenuItem value="asc">Ascending</MenuItem>
+          </TextField>
+
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
           </Button>
-        </Stack>
-      </Stack>
+        </Box>
+      </Popover>
 
       <CrudTable<PromoCodeDto>
         rows={promoCodes}

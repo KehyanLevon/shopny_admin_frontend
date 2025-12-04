@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Pagination,
+  Popover,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import axios from "axios";
 import {
   categoryApi,
@@ -50,6 +53,23 @@ export default function CategoriesPage() {
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
     "all"
   );
+
+  // NEW: фильтр активности
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
+    ""
+  );
+
+  // NEW: Popover
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -97,6 +117,13 @@ export default function CategoriesPage() {
         params.search = term;
       }
 
+      // NEW: isActive
+      if (statusFilter === "active") {
+        params.isActive = true;
+      } else if (statusFilter === "inactive") {
+        params.isActive = false;
+      }
+
       const res = await categoryApi.getAll(params);
       const data: any = res.data;
 
@@ -123,7 +150,7 @@ export default function CategoriesPage() {
 
   useEffect(() => {
     void loadCategories();
-  }, [selectedSectionId, search, page]);
+  }, [selectedSectionId, statusFilter, search, page]);
 
   const validateCategory = (
     values: CategoryPayload,
@@ -404,19 +431,53 @@ export default function CategoriesPage() {
     (formMode !== "create" || !!formValues.sectionId) &&
     isDirty;
 
+  const handleClearFilters = () => {
+    setSelectedSectionId("all");
+    setStatusFilter("");
+    setPage(1);
+  };
+
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Categories</Typography>
-        <Stack direction="row" gap={2} alignItems="center">
-          <TextField
-            size="small"
-            label="Search"
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-            }}
-          />
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        {/* Search вместо заголовка */}
+        <TextField
+          size="small"
+          label="Search"
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+          }}
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+        />
+
+        <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New Category
+          </Button>
+        </Stack>
+      </Stack>
+
+      {/* Popover с фильтрами */}
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={260}>
+          <Typography variant="subtitle1">Filters</Typography>
+
           <TextField
             select
             size="small"
@@ -427,7 +488,6 @@ export default function CategoriesPage() {
               setSelectedSectionId(value === "all" ? "all" : Number(value));
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all">All sections</MenuItem>
             {sections.map((s) => (
@@ -436,11 +496,27 @@ export default function CategoriesPage() {
               </MenuItem>
             ))}
           </TextField>
-          <Button variant="contained" onClick={handleOpenCreate}>
-            New Category
+
+          <TextField
+            select
+            size="small"
+            label="Active"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | "active" | "inactive");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="active">Only active</MenuItem>
+            <MenuItem value="inactive">Only inactive</MenuItem>
+          </TextField>
+
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
           </Button>
-        </Stack>
-      </Stack>
+        </Box>
+      </Popover>
 
       <CrudTable
         rows={categories}

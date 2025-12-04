@@ -1,13 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   Pagination,
+  Popover,
   Stack,
   TextField,
   Typography,
+  MenuItem,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import axios from "axios";
 import {
   sectionApi,
@@ -46,6 +50,21 @@ export default function SectionsPage() {
   const [pagesCount, setPagesCount] = useState(1);
   const [total, setTotal] = useState(0);
 
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
+    ""
+  );
+
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
+
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [editingSection, setEditingSection] = useState<SectionDto | null>(null);
@@ -67,11 +86,18 @@ export default function SectionsPage() {
     setLoading(true);
     try {
       const term = search.trim();
-      const params = {
+      const params: any = {
         page,
         limit: ROWS_PER_PAGE,
         q: term || undefined,
       };
+
+      // NEW: пробрасываем isActive
+      if (statusFilter === "active") {
+        params.isActive = true;
+      } else if (statusFilter === "inactive") {
+        params.isActive = false;
+      }
 
       const res = await sectionApi.getAll(params);
       const data = res.data;
@@ -95,7 +121,7 @@ export default function SectionsPage() {
 
   useEffect(() => {
     void loadSections();
-  }, [page, search]);
+  }, [page, search, statusFilter]);
 
   const validateSection = (values: SectionPayload): SectionFormErrors => {
     const errors: SectionFormErrors = {};
@@ -286,28 +312,75 @@ export default function SectionsPage() {
   ];
 
   const isFormValid = Object.keys(validateSection(formValues)).length === 0;
-
   const hasChanges =
     JSON.stringify(formValues) !== JSON.stringify(initialFormValues);
 
+  const handleClearFilters = () => {
+    setStatusFilter("");
+    setPage(1);
+  };
+
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Sections</Typography>
-        <Stack direction="row" gap={2}>
-          <TextField
-            size="small"
-            label="Search"
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-            }}
-          />
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        {/* Search вместо заголовка */}
+        <TextField
+          fullWidth
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+          size="small"
+          label="Search"
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+          }}
+        />
+
+        <Stack direction="row" gap={2} alignItems="center">
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
           <Button variant="contained" onClick={handleOpenCreate}>
             New Section
           </Button>
         </Stack>
       </Stack>
+
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={260}>
+          <Typography variant="subtitle1">Filters</Typography>
+
+          <TextField
+            select
+            size="small"
+            label="Active"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | "active" | "inactive");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="active">Only active</MenuItem>
+            <MenuItem value="inactive">Only inactive</MenuItem>
+          </TextField>
+
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
+          </Button>
+        </Box>
+      </Popover>
 
       <CrudTable
         rows={sections}

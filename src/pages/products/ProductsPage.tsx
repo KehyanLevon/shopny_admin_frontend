@@ -1,16 +1,19 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Pagination,
+  Popover,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import {
   productApi,
   type ProductDto,
@@ -37,7 +40,7 @@ export default function ProductsPage() {
 
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [_, setTotal] = useState(0);
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
     "all"
@@ -46,6 +49,19 @@ export default function ProductsPage() {
     "all"
   );
   const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">("none");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
+    ""
+  );
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -91,6 +107,11 @@ export default function ProductsPage() {
       if (priceSort !== "none") {
         params.sortBy = "price";
         params.sortDir = priceSort;
+      }
+      if (statusFilter === "active") {
+        (params as any).isActive = true;
+      } else if (statusFilter === "inactive") {
+        (params as any).isActive = false;
       }
 
       const res: any = await productApi.getAll(params);
@@ -138,7 +159,14 @@ export default function ProductsPage() {
 
   useEffect(() => {
     void loadProducts();
-  }, [page, search, selectedSectionId, selectedCategoryId, priceSort]);
+  }, [
+    page,
+    search,
+    selectedSectionId,
+    selectedCategoryId,
+    priceSort,
+    statusFilter,
+  ]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -245,19 +273,56 @@ export default function ProductsPage() {
     },
   ];
 
+  const handleClearFilters = () => {
+    setSelectedSectionId("all");
+    setSelectedCategoryId("all");
+    setPriceSort("none");
+    setStatusFilter("");
+    setPage(1);
+  };
+
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Products</Typography>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        {/* Search вместо заголовка */}
+        <TextField
+          size="small"
+          label="Search"
+          value={searchInput}
+          onChange={(e) => {
+            setSearchInput(e.target.value);
+          }}
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+        />
+
         <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
-          <TextField
-            size="small"
-            label="Search"
-            value={searchInput}
-            onChange={(e) => {
-              setSearchInput(e.target.value);
-            }}
-          />
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New Product
+          </Button>
+        </Stack>
+      </Stack>
+
+      {/* Popover с фильтрами */}
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={280}>
+          <Typography variant="subtitle1">Filters</Typography>
+
           <TextField
             select
             size="small"
@@ -270,7 +335,6 @@ export default function ProductsPage() {
               setSelectedCategoryId("all");
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all">All sections</MenuItem>
             {sections.map((s) => (
@@ -279,6 +343,7 @@ export default function ProductsPage() {
               </MenuItem>
             ))}
           </TextField>
+
           <TextField
             select
             size="small"
@@ -290,7 +355,6 @@ export default function ProductsPage() {
               setSelectedCategoryId(parsed);
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all">All categories</MenuItem>
             {categories
@@ -304,6 +368,21 @@ export default function ProductsPage() {
                   {c.title}
                 </MenuItem>
               ))}
+          </TextField>
+
+          <TextField
+            select
+            size="small"
+            label="Active"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | "active" | "inactive");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="active">Only active</MenuItem>
+            <MenuItem value="inactive">Only inactive</MenuItem>
           </TextField>
 
           <ToggleButtonGroup
@@ -321,11 +400,11 @@ export default function ProductsPage() {
             <ToggleButton value="desc">Price ↓</ToggleButton>
           </ToggleButtonGroup>
 
-          <Button variant="contained" onClick={handleOpenCreate}>
-            New Product
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
           </Button>
-        </Stack>
-      </Stack>
+        </Box>
+      </Popover>
 
       <CrudTable
         rows={products}

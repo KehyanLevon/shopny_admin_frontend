@@ -1,56 +1,132 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Box,
+  Button,
+  Chip,
+  IconButton,
+  MenuItem,
+  Pagination,
+  Popover,
+  Stack,
   TextField,
   Typography,
-  Stack,
-  Chip,
-  Pagination,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import { usersApi, type UserDto } from "../../api/usersApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 
 const ROWS_PER_PAGE = 10;
 
+type VerifiedFilter = "" | "verified" | "not-verified";
+type SortBy = "createdAt" | "verifiedAt";
+type SortDir = "asc" | "desc";
+
+const formatDateTime = (value: string | null | undefined): string => {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleString();
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<UserDto[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
-  const [limit, setLimit] = useState(ROWS_PER_PAGE);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const loadUsers = async (pageArg: number, searchArg: string) => {
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [total, setTotal] = useState(0);
+
+  const [verifiedFilter, setVerifiedFilter] = useState<VerifiedFilter>("");
+  const [roleFilter, setRoleFilter] = useState<string>("");
+  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filterOpen = Boolean(filterAnchorEl);
+
+  const handleOpenFilters = (event: React.MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
+
+  const loadUsers = async () => {
     setLoading(true);
     try {
-      const res = await usersApi.getAll({
-        page: pageArg,
+      const params: any = {
+        page,
         limit: ROWS_PER_PAGE,
-        q: searchArg.trim() || undefined,
-      });
+      };
 
-      const data = res.data;
-      setUsers(data.items);
-      setTotal(data.total);
-      setLimit(data.limit ?? ROWS_PER_PAGE);
+      const term = search.trim();
+      if (term) {
+        params.search = term;
+      }
+
+      if (verifiedFilter === "verified") {
+        params.isVerified = 1;
+      } else if (verifiedFilter === "not-verified") {
+        params.isVerified = 0;
+      }
+
+      if (roleFilter) {
+        params.role = roleFilter;
+      }
+
+      params.sortBy = sortBy;
+      params.sortDir = sortDir;
+
+      const res: any = await usersApi.getAll(params);
+      const data = res?.data ?? res;
+
+      const items: UserDto[] = data?.items ?? data ?? [];
+      setUsers(items);
+
+      if (typeof data?.total === "number") {
+        setTotal(data.total);
+      }
+      if (typeof data?.pages === "number") {
+        setPages(data.pages);
+      } else if (typeof data?.total === "number") {
+        setPages(Math.max(1, Math.ceil(data.total / ROWS_PER_PAGE)));
+      } else {
+        setPages(1);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    void loadUsers(page, search);
-  }, [page, search]);
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
 
-  const pageCount = Math.max(1, Math.ceil(total / limit));
+    searchTimerRef.current = setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 400);
+
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, [searchInput]);
+
+  useEffect(() => {
+    void loadUsers();
+  }, [page, search, verifiedFilter, roleFilter, sortBy, sortDir]);
 
   const columns: CrudColumn<UserDto>[] = [
-    {
-      id: "id",
-      label: "ID",
-      render: (row) => row.id,
-    },
     {
       id: "name",
       label: "Name",
@@ -65,21 +141,26 @@ export default function UsersPage() {
       id: "roles",
       label: "Roles",
       render: (row) =>
-        row.roles.length === 0 ? (
-          "-"
-        ) : (
-          <Stack direction="row" spacing={1} flexWrap="wrap">
+        row.roles && row.roles.length ? (
+          <Stack direction="row" spacing={0.5} flexWrap="wrap">
             {row.roles.map((r) => (
-              <Chip key={r} label={r} size="small" />
+              <Chip
+                key={r}
+                label={r.replace(/^ROLE_/, "")}
+                size="small"
+                variant="outlined"
+              />
             ))}
           </Stack>
+        ) : (
+          "—"
         ),
     },
     {
-      id: "verified",
+      id: "isVerified",
       label: "Verified",
       render: (row) =>
-        row.isVerified ? (
+        (row as any).isVerified ? (
           <Chip label="Verified" color="success" size="small" />
         ) : (
           <Chip label="Not verified" color="warning" size="small" />
@@ -88,24 +169,35 @@ export default function UsersPage() {
     {
       id: "verifiedAt",
       label: "Verified at",
-      render: (row) =>
-        row.verifiedAt ? new Date(row.verifiedAt).toLocaleString() : "—",
+      render: (row) => formatDateTime((row as any).verifiedAt),
+    },
+    {
+      id: "createdAt",
+      label: "Created at",
+      render: (row) => formatDateTime((row as any).createdAt),
     },
   ];
 
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Users</Typography>
         <TextField
           size="small"
-          label="Search"
-          value={search}
+          label="Search users"
+          value={searchInput}
           onChange={(e) => {
-            setSearch(e.target.value);
-            setPage(1);
+            setSearchInput(e.target.value);
           }}
         />
+        <Stack direction="row" gap={2} alignItems="center">
+          <IconButton
+            size="small"
+            onClick={handleOpenFilters}
+            aria-label="Filters"
+          >
+            <FilterListIcon />
+          </IconButton>
+        </Stack>
       </Stack>
 
       <CrudTable<UserDto>
@@ -117,12 +209,113 @@ export default function UsersPage() {
 
       <Stack mt={2} alignItems="center">
         <Pagination
-          count={pageCount}
+          count={pages}
           page={page}
           onChange={(_, value) => setPage(value)}
           color="primary"
         />
+        <Typography variant="body2" color="text.secondary" mt={1}>
+          Total: {total}
+        </Typography>
       </Stack>
+
+      <Popover
+        open={filterOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{
+          vertical: "bottom",
+          horizontal: "right",
+        }}
+        transformOrigin={{
+          vertical: "top",
+          horizontal: "right",
+        }}
+      >
+        <Box p={2} minWidth={260}>
+          <Typography variant="subtitle1" mb={1}>
+            Filters
+          </Typography>
+
+          <Stack spacing={2}>
+            <TextField
+              select
+              size="small"
+              label="Verified"
+              value={verifiedFilter}
+              onChange={(e) => {
+                const val = e.target.value as VerifiedFilter;
+                setVerifiedFilter(val);
+                setPage(1);
+              }}
+            >
+              <MenuItem value="">All</MenuItem>
+              <MenuItem value="verified">Only verified</MenuItem>
+              <MenuItem value="not-verified">Only not verified</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Role"
+              value={roleFilter}
+              onChange={(e) => {
+                const val = e.target.value as string;
+                setRoleFilter(val);
+                setPage(1);
+              }}
+            >
+              <MenuItem value="">All roles</MenuItem>
+              <MenuItem value="ROLE_USER">User</MenuItem>
+              <MenuItem value="ROLE_ADMIN">Admin</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Sort by"
+              value={sortBy}
+              onChange={(e) => {
+                const val = e.target.value as SortBy;
+                setSortBy(val);
+                setPage(1);
+              }}
+            >
+              <MenuItem value="createdAt">Created at</MenuItem>
+              <MenuItem value="verifiedAt">Verified at</MenuItem>
+            </TextField>
+
+            <TextField
+              select
+              size="small"
+              label="Direction"
+              value={sortDir}
+              onChange={(e) => {
+                const val = e.target.value as SortDir;
+                setSortDir(val);
+                setPage(1);
+              }}
+            >
+              <MenuItem value="asc">Ascending</MenuItem>
+              <MenuItem value="desc">Descending</MenuItem>
+            </TextField>
+
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => {
+                setVerifiedFilter("");
+                setRoleFilter("");
+                setSortBy("createdAt");
+                setSortDir("desc");
+                setPage(1);
+              }}
+            >
+              Reset filters
+            </Button>
+          </Stack>
+        </Box>
+      </Popover>
     </Box>
   );
 }
