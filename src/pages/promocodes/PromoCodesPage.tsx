@@ -53,7 +53,9 @@ export default function PromoCodesPage() {
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+
   const [scopeFilter, setScopeFilter] = useState<PromoScopeType | "all-scopes">(
     "all-scopes"
   );
@@ -134,6 +136,15 @@ export default function PromoCodesPage() {
     void loadCategories();
     void loadProducts();
   }, []);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setPage(1);
+    }, 400);
+
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
 
   useEffect(() => {
     void loadPromoCodes();
@@ -231,10 +242,9 @@ export default function PromoCodesPage() {
           <TextField
             size="small"
             label="Search"
-            value={search}
+            value={searchInput}
             onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
+              setSearchInput(e.target.value);
             }}
           />
 

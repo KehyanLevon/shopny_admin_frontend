@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Box,
   Button,
@@ -31,7 +31,10 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -112,6 +115,23 @@ export default function ProductsPage() {
   };
 
   useEffect(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+    }
+
+    searchTimerRef.current = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 400);
+
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+      }
+    };
+  }, [searchInput]);
+
+  useEffect(() => {
     void loadSections();
     void loadCategories();
   }, []);
@@ -164,11 +184,6 @@ export default function ProductsPage() {
       ),
     },
     {
-      id: "slug",
-      label: "Slug",
-      render: (row) => <Chip label={row.slug} size="small" />,
-    },
-    {
       id: "price",
       label: "Price",
       align: "right",
@@ -205,7 +220,7 @@ export default function ProductsPage() {
       id: "status",
       label: "Status",
       render: (row) =>
-        row.isArchived ? (
+        (row as any).isArchived ? (
           <Chip label="Archived" color="default" size="small" />
         ) : row.isActive ? (
           <Chip label="Active" color="success" size="small" />
@@ -238,10 +253,9 @@ export default function ProductsPage() {
           <TextField
             size="small"
             label="Search"
-            value={search}
+            value={searchInput}
             onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
+              setSearchInput(e.target.value);
             }}
           />
           <TextField

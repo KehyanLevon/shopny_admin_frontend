@@ -25,10 +25,10 @@ export interface ProductDto {
 
 export interface ProductCreatePayload {
   title: string;
-  price: string;
+  price: number;
   categoryId: number;
   description?: string | null;
-  discountPrice?: string | null;
+  discountPrice?: number | null;
   status?: string | null;
   images?: string[] | null;
   isActive?: boolean;
@@ -36,10 +36,10 @@ export interface ProductCreatePayload {
 
 export interface ProductUpdatePayload {
   title?: string;
-  price?: string;
+  price?: number;
   categoryId?: number;
   description?: string | null;
-  discountPrice?: string | null;
+  discountPrice?: number | null;
   status?: string | null;
   images?: string[] | null;
   isActive?: boolean;
