@@ -20,6 +20,10 @@ export function SearchInput({
 }: SearchInputProps) {
   const [value, setValue] = useState(initialValue);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const callbackRef = useRef(onSearchChange);
+  useEffect(() => {
+    callbackRef.current = onSearchChange;
+  }, [onSearchChange]);
 
   useEffect(() => {
     setValue(initialValue);
@@ -32,7 +36,7 @@ export function SearchInput({
 
     timerRef.current = setTimeout(() => {
       const trimmed = value.trim();
-      onSearchChange(trimmed);
+      callbackRef.current(trimmed);
     }, delay);
 
     return () => {
@@ -40,7 +44,7 @@ export function SearchInput({
         clearTimeout(timerRef.current);
       }
     };
-  }, [value, delay, onSearchChange]);
+  }, [value, delay]);
 
   return (
     <TextField

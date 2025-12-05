@@ -14,7 +14,7 @@ interface AuthState {
   user: AuthUser | null;
   loading: boolean;
   initialized: boolean;
-  initFromCookies: () => Promise<void>;
+  initFromCookies: (force?: boolean) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   logoutFromOtherTab: () => void;
@@ -29,9 +29,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   loading: false,
   initialized: false,
 
-  async initFromCookies() {
+  async initFromCookies(force?: boolean) {
     const { initialized } = get();
-    if (initialized) return;
+    if (initialized && !force) return;
 
     set({ loading: true });
 
@@ -55,6 +55,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true });
     try {
       await authApi.login({ email, password });
+
       const meRes = await authApi.me();
       const user = meRes.data as AuthUser;
 
@@ -65,17 +66,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           }
         } catch {}
 
-        set({ user: null });
+        set({ user: null, initialized: true });
         throw new Error("ACCESS_DENIED");
       }
+
       set({ user, initialized: true });
+
       try {
         window.localStorage.setItem(
           AUTH_EVENT_KEY,
-          JSON.stringify({
-            type: "login",
-            ts: Date.now(),
-          })
+          JSON.stringify({ type: "login", ts: Date.now() })
         );
       } catch {}
     } finally {
@@ -91,19 +91,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch {
     } finally {
-      set({ user: null, initialized: false, loading: false });
+      set({ user: null, initialized: true, loading: false });
+
       try {
         window.localStorage.setItem(
           AUTH_EVENT_KEY,
-          JSON.stringify({
-            type: "logout",
-            ts: Date.now(),
-          })
+          JSON.stringify({ type: "logout", ts: Date.now() })
         );
       } catch {}
     }
   },
   logoutFromOtherTab() {
-    set({ user: null, initialized: false });
+    set({ user: null, initialized: true, loading: false });
   },
 }));

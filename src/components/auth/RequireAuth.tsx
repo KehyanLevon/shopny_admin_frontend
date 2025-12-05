@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -10,13 +10,6 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const user = useAuthStore((s) => s.user);
   const initialized = useAuthStore((s) => s.initialized);
   const loading = useAuthStore((s) => s.loading);
-  const initFromCookies = useAuthStore((s) => s.initFromCookies);
-
-  useEffect(() => {
-    if (!initialized) {
-      initFromCookies();
-    }
-  }, [initialized, initFromCookies]);
 
   if (!initialized || loading) {
     return (
