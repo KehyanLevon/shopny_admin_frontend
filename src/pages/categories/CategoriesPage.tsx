@@ -26,6 +26,7 @@ import {
 } from "../../components/common/EntityFormDialog";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
+import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
 
@@ -40,26 +41,43 @@ type CategoryFieldName = keyof CategoryPayload;
 type CategoryErrors = Partial<Record<CategoryFieldName | "global", string[]>>;
 
 export default function CategoriesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+  const initialSectionIdParam = searchParams.get("sectionId");
+  const initialSectionId: number | "all" =
+    initialSectionIdParam != null
+      ? Number.isNaN(Number(initialSectionIdParam))
+        ? "all"
+        : Number(initialSectionIdParam)
+      : "all";
+  const initialStatus =
+    (searchParams.get("status") as "" | "active" | "inactive" | null) ?? "";
+
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
   const [pagesCount, setPagesCount] = useState(1);
   const [total, setTotal] = useState(0);
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
-    "all"
+    initialSectionId
   );
 
-  // NEW: фильтр активности
+  // фильтр активности
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
-    ""
+    initialStatus
   );
 
-  // NEW: Popover
+  // Popover
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
     null
   );
@@ -117,7 +135,6 @@ export default function CategoriesPage() {
         params.search = term;
       }
 
-      // NEW: isActive
       if (statusFilter === "active") {
         params.isActive = true;
       } else if (statusFilter === "inactive") {
@@ -135,6 +152,7 @@ export default function CategoriesPage() {
     }
   };
 
+  // дебаунс поиска
   useEffect(() => {
     const id = setTimeout(() => {
       setSearch(searchInput.trim());
@@ -151,6 +169,22 @@ export default function CategoriesPage() {
   useEffect(() => {
     void loadCategories();
   }, [selectedSectionId, statusFilter, search, page]);
+
+  // 🔗 Синхронизация с URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (selectedSectionId !== "all") {
+      params.sectionId = String(selectedSectionId);
+    }
+    if (statusFilter) {
+      params.status = statusFilter;
+    }
+
+    setSearchParams(params, { replace: true });
+  }, [page, search, selectedSectionId, statusFilter, setSearchParams]);
 
   const validateCategory = (
     values: CategoryPayload,
@@ -446,7 +480,6 @@ export default function CategoriesPage() {
         gap={2}
         alignItems="center"
       >
-        {/* Search вместо заголовка */}
         <TextField
           size="small"
           label="Search"
@@ -467,7 +500,6 @@ export default function CategoriesPage() {
         </Stack>
       </Stack>
 
-      {/* Popover с фильтрами */}
       <Popover
         open={filtersOpen}
         anchorEl={filterAnchorEl}

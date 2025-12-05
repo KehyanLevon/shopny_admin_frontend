@@ -1,3 +1,5 @@
+// Весь файл такой же как у тебя, только добавлены useSearchParams + инициализация и эффект
+
 import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
@@ -24,6 +26,7 @@ import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 import { PromoCodeFormDialog } from "../../components/promocodes/PromoCodeFormDialog";
+import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
 
@@ -50,32 +53,58 @@ const formatDateTime = (value: string | null): string => {
 };
 
 export default function PromoCodesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+
+  const initialScope =
+    (searchParams.get("scope") as PromoScopeType | "all-scopes" | null) ??
+    "all-scopes";
+
+  const initialIsActive =
+    (searchParams.get("active") as "" | "active" | "inactive" | null) ?? "";
+  const initialExpired =
+    (searchParams.get("expired") as "" | "expired" | "not-expired" | null) ??
+    "";
+
+  const initialSortBy =
+    (searchParams.get("sortBy") as
+      | "createdAt"
+      | "startsAt"
+      | "expiresAt"
+      | null) ?? "createdAt";
+  const initialSortDir =
+    (searchParams.get("sortDir") as "asc" | "desc" | null) ?? "desc";
+
   const [promoCodes, setPromoCodes] = useState<PromoCodeDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
 
   const [scopeFilter, setScopeFilter] = useState<PromoScopeType | "all-scopes">(
-    "all-scopes"
+    initialScope
   );
   const [isActiveFilter, setIsActiveFilter] = useState<
     "" | "active" | "inactive"
-  >("");
+  >(initialIsActive);
   const [expiredFilter, setExpiredFilter] = useState<
     "" | "expired" | "not-expired"
-  >("");
+  >(initialExpired);
 
-  // NEW: сортировка
   const [sortBy, setSortBy] = useState<"createdAt" | "startsAt" | "expiresAt">(
-    "createdAt"
+    initialSortBy
   );
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(initialSortDir);
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(ROWS_PER_PAGE);
 
@@ -87,7 +116,6 @@ export default function PromoCodesPage() {
   const [deleteTarget, setDeleteTarget] = useState<PromoCodeDto | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // NEW: Popover
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
     null
   );
@@ -182,6 +210,30 @@ export default function PromoCodesPage() {
   ]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
+
+  // 🔗 Синхронизация с URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (scopeFilter !== "all-scopes") params.scope = scopeFilter;
+    if (isActiveFilter) params.active = isActiveFilter;
+    if (expiredFilter) params.expired = expiredFilter;
+    if (sortBy !== "createdAt") params.sortBy = sortBy;
+    if (sortDir !== "desc") params.sortDir = sortDir;
+
+    setSearchParams(params, { replace: true });
+  }, [
+    page,
+    search,
+    scopeFilter,
+    isActiveFilter,
+    expiredFilter,
+    sortBy,
+    sortDir,
+    setSearchParams,
+  ]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -293,7 +345,6 @@ export default function PromoCodesPage() {
         gap={2}
         alignItems="center"
       >
-        {/* Search вместо заголовка */}
         <TextField
           size="small"
           label="Search"
@@ -315,7 +366,6 @@ export default function PromoCodesPage() {
         </Stack>
       </Stack>
 
-      {/* Popover с фильтрами и сортировкой */}
       <Popover
         open={filtersOpen}
         anchorEl={filterAnchorEl}

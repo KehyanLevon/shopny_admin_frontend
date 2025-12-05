@@ -25,33 +25,67 @@ import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 import { ProductFormDialog } from "../../components/products/ProductFormDialog";
+import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
 
 export default function ProductsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+
+  const initialSectionIdParam = searchParams.get("sectionId");
+  const initialSectionId: number | "all" =
+    initialSectionIdParam != null
+      ? Number.isNaN(Number(initialSectionIdParam))
+        ? "all"
+        : Number(initialSectionIdParam)
+      : "all";
+
+  const initialCategoryIdParam = searchParams.get("categoryId");
+  const initialCategoryId: number | "all" =
+    initialCategoryIdParam != null
+      ? Number.isNaN(Number(initialCategoryIdParam))
+        ? "all"
+        : Number(initialCategoryIdParam)
+      : "all";
+
+  const initialPriceSort =
+    (searchParams.get("priceSort") as "none" | "asc" | "desc" | null) ?? "none";
+
+  const initialStatusFilter =
+    (searchParams.get("status") as "" | "active" | "inactive" | null) ?? "";
+
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [pages, setPages] = useState(1);
   const [_, setTotal] = useState(0);
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
-    "all"
+    initialSectionId
   );
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | "all">(
-    "all"
+    initialCategoryId
   );
-  const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">("none");
+  const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">(
+    initialPriceSort
+  );
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
-    ""
+    initialStatusFilter
   );
+
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
     null
   );
@@ -108,6 +142,7 @@ export default function ProductsPage() {
         params.sortBy = "price";
         params.sortDir = priceSort;
       }
+
       if (statusFilter === "active") {
         (params as any).isActive = true;
       } else if (statusFilter === "inactive") {
@@ -135,6 +170,7 @@ export default function ProductsPage() {
     }
   };
 
+  // дебаунс поиска
   useEffect(() => {
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
@@ -166,6 +202,36 @@ export default function ProductsPage() {
     selectedCategoryId,
     priceSort,
     statusFilter,
+  ]);
+
+  // 🔗 Синхронизация с URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (selectedSectionId !== "all") {
+      params.sectionId = String(selectedSectionId);
+    }
+    if (selectedCategoryId !== "all") {
+      params.categoryId = String(selectedCategoryId);
+    }
+    if (priceSort !== "none") {
+      params.priceSort = priceSort;
+    }
+    if (statusFilter) {
+      params.status = statusFilter;
+    }
+
+    setSearchParams(params, { replace: true });
+  }, [
+    page,
+    search,
+    selectedSectionId,
+    selectedCategoryId,
+    priceSort,
+    statusFilter,
+    setSearchParams,
   ]);
 
   const handleOpenCreate = () => {
@@ -290,7 +356,6 @@ export default function ProductsPage() {
         gap={2}
         alignItems="center"
       >
-        {/* Search вместо заголовка */}
         <TextField
           size="small"
           label="Search"
@@ -312,7 +377,6 @@ export default function ProductsPage() {
         </Stack>
       </Stack>
 
-      {/* Popover с фильтрами */}
       <Popover
         open={filtersOpen}
         anchorEl={filterAnchorEl}

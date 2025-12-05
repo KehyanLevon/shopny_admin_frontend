@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
@@ -14,6 +14,7 @@ import {
 import FilterListIcon from "@mui/icons-material/FilterList";
 import { usersApi, type UserDto } from "../../api/usersApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
+import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
 
@@ -29,28 +30,45 @@ const formatDateTime = (value: string | null | undefined): string => {
 };
 
 export default function UsersPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+
+  const initialVerified =
+    (searchParams.get("verified") as VerifiedFilter | null) ?? "";
+  const initialRole = searchParams.get("role") ?? "";
+  const initialSortBy =
+    (searchParams.get("sortBy") as SortBy | null) ?? "createdAt";
+  const initialSortDir =
+    (searchParams.get("sortDir") as SortDir | null) ?? "desc";
+
   const [users, setUsers] = useState<UserDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  const [verifiedFilter, setVerifiedFilter] = useState<VerifiedFilter>("");
-  const [roleFilter, setRoleFilter] = useState<string>("");
-  const [sortBy, setSortBy] = useState<SortBy>("createdAt");
-  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [verifiedFilter, setVerifiedFilter] =
+    useState<VerifiedFilter>(initialVerified);
+  const [roleFilter, setRoleFilter] = useState<string>(initialRole);
+  const [sortBy, setSortBy] = useState<SortBy>(initialSortBy);
+  const [sortDir, setSortDir] = useState<SortDir>(initialSortDir);
 
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
     null
   );
   const filterOpen = Boolean(filterAnchorEl);
 
-  const handleOpenFilters = (event: React.MouseEvent<HTMLElement>) => {
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
     setFilterAnchorEl(event.currentTarget);
   };
 
@@ -105,6 +123,7 @@ export default function UsersPage() {
     }
   };
 
+  // 🔍 debounce search
   useEffect(() => {
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
@@ -125,6 +144,27 @@ export default function UsersPage() {
   useEffect(() => {
     void loadUsers();
   }, [page, search, verifiedFilter, roleFilter, sortBy, sortDir]);
+
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (verifiedFilter) params.verified = verifiedFilter;
+    if (roleFilter) params.role = roleFilter;
+    if (sortBy !== "createdAt") params.sortBy = sortBy;
+    if (sortDir !== "desc") params.sortDir = sortDir;
+
+    setSearchParams(params, { replace: true });
+  }, [
+    page,
+    search,
+    verifiedFilter,
+    roleFilter,
+    sortBy,
+    sortDir,
+    setSearchParams,
+  ]);
 
   const columns: CrudColumn<UserDto>[] = [
     {
@@ -173,7 +213,7 @@ export default function UsersPage() {
     },
     {
       id: "createdAt",
-      label: "Created at",
+      label: "Registered at",
       render: (row) => formatDateTime((row as any).createdAt),
     },
   ];
@@ -183,7 +223,7 @@ export default function UsersPage() {
       <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
         <TextField
           size="small"
-          label="Search users"
+          label="Search"
           value={searchInput}
           onChange={(e) => {
             setSearchInput(e.target.value);

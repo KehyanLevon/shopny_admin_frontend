@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, useRef, type MouseEvent } from "react";
 import {
   Box,
   Button,
@@ -25,6 +25,7 @@ import {
 } from "../../components/common/EntityFormDialog";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
+import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
 
@@ -41,17 +42,27 @@ type SectionFormErrors = Partial<
 type SectionTouched = Partial<Record<keyof SectionPayload, boolean>>;
 
 export default function SectionsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+  const initialStatus =
+    (searchParams.get("status") as "" | "active" | "inactive" | null) ?? "";
+
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
   const [pagesCount, setPagesCount] = useState(1);
   const [total, setTotal] = useState(0);
 
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
-    ""
+    initialStatus
   );
 
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
@@ -92,7 +103,6 @@ export default function SectionsPage() {
         q: term || undefined,
       };
 
-      // NEW: пробрасываем isActive
       if (statusFilter === "active") {
         params.isActive = true;
       } else if (statusFilter === "inactive") {
@@ -110,6 +120,7 @@ export default function SectionsPage() {
     }
   };
 
+  // дебаунс поиска
   useEffect(() => {
     const id = window.setTimeout(() => {
       setSearch(searchInput.trim());
@@ -122,6 +133,17 @@ export default function SectionsPage() {
   useEffect(() => {
     void loadSections();
   }, [page, search, statusFilter]);
+
+  // 🔗 Синхронизация с URL
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (statusFilter) params.status = statusFilter;
+
+    setSearchParams(params, { replace: true });
+  }, [page, search, statusFilter, setSearchParams]);
 
   const validateSection = (values: SectionPayload): SectionFormErrors => {
     const errors: SectionFormErrors = {};
@@ -329,7 +351,6 @@ export default function SectionsPage() {
         gap={2}
         alignItems="center"
       >
-        {/* Search вместо заголовка */}
         <TextField
           fullWidth
           sx={{ maxWidth: 320, flexGrow: 1 }}
