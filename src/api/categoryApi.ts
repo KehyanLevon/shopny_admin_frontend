@@ -25,6 +25,9 @@ export interface CategoryListParams {
   limit?: number;
   q?: string;
   sectionId?: number;
+  isActive?: number;
+  all?: boolean;
+  fields?: string;
 }
 
 export const categoryApi = {

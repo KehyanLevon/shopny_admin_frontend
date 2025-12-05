@@ -102,13 +102,19 @@ export default function ProductsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadSections = async () => {
-    const res: any = await sectionApi.getAll();
+    const res: any = await sectionApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setSections(items);
   };
 
   const loadCategories = async () => {
-    const res: any = await categoryApi.getAll();
+    const res: any = await categoryApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: CategoryDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setCategories(items);
   };

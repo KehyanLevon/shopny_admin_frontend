@@ -110,7 +110,10 @@ export default function CategoriesPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadSections = async () => {
-    const res: any = await sectionApi.getAll();
+    const res: any = await sectionApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setSections(items);
   };

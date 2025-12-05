@@ -53,6 +53,9 @@ export interface ProductListParams {
   sortDir?: "asc" | "desc";
   categoryId?: number;
   sectionId?: number;
+  isActive?: number;
+  all?: boolean;
+  fields?: string;
 }
 
 export const productApi = {
