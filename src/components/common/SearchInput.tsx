@@ -19,8 +19,10 @@ export function SearchInput({
   ...textFieldProps
 }: SearchInputProps) {
   const [value, setValue] = useState(initialValue);
+
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(onSearchChange);
+
   useEffect(() => {
     callbackRef.current = onSearchChange;
   }, [onSearchChange]);
@@ -30,34 +32,34 @@ export function SearchInput({
   }, [initialValue]);
 
   useEffect(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-    }
-
-    timerRef.current = setTimeout(() => {
-      const trimmed = value.trim();
-      callbackRef.current(trimmed);
-    }, delay);
-
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-  }, [value, delay]);
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const next = e.target.value.slice(0, maxLength);
+    setValue(next);
+
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+
+    timerRef.current = setTimeout(() => {
+      const trimmed = next.trim();
+      callbackRef.current(trimmed);
+    }, delay);
+  };
 
   return (
     <TextField
       size={size}
       label={label}
       value={value}
-      onChange={(e) => {
-        const next = e.target.value.slice(0, maxLength);
-        setValue(next);
-      }}
-      inputProps={{
-        maxLength,
-      }}
+      onChange={handleChange}
+      inputProps={{ maxLength }}
       {...textFieldProps}
     />
   );

@@ -474,7 +474,9 @@ export default function CategoriesPage() {
           initialValue={initialSearch}
           onSearchChange={(value) => {
             setSearch(value);
-            setPage(1);
+            if (value !== "") {
+              setPage(1);
+            }
           }}
           sx={{ maxWidth: 320, flexGrow: 1 }}
         />

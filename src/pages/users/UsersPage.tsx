@@ -51,7 +51,6 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(false);
 
   const [search, setSearch] = useState(initialSearch);
-
   const [page, setPage] = useState(initialPage);
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -164,14 +163,14 @@ export default function UsersPage() {
       render: (row) =>
         row.roles && row.roles.length ? (
           <Stack direction="row" spacing={0.5} flexWrap="wrap">
-            {row.roles.map((r) => (
-              <Chip
-                key={r}
-                label={r.replace(/^ROLE_/, "")}
-                size="small"
-                variant="outlined"
-              />
-            ))}
+            <Chip
+              key={row.roles[row.roles.length - 1]}
+              label={row.roles[0]
+                .replace("ROLE_ADMIN", "Admin")
+                .replace("ROLE_USER", "Customer")}
+              size="small"
+              variant="outlined"
+            />
           </Stack>
         ) : (
           "—"
@@ -206,9 +205,12 @@ export default function UsersPage() {
           initialValue={initialSearch}
           onSearchChange={(value) => {
             setSearch(value);
-            setPage(1);
+            if (value !== "") {
+              setPage(1);
+            }
           }}
         />
+
         <Stack direction="row" gap={2} alignItems="center">
           <IconButton
             size="small"
@@ -286,7 +288,7 @@ export default function UsersPage() {
               }}
             >
               <MenuItem value="">All roles</MenuItem>
-              <MenuItem value="ROLE_USER">User</MenuItem>
+              <MenuItem value="ROLE_USER">Customer</MenuItem>
               <MenuItem value="ROLE_ADMIN">Admin</MenuItem>
             </TextField>
 

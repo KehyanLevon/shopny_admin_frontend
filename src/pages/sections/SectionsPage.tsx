@@ -344,7 +344,9 @@ export default function SectionsPage() {
           initialValue={initialSearch}
           onSearchChange={(value) => {
             setSearch(value);
-            setPage(1);
+            if (value !== "") {
+              setPage(1);
+            }
           }}
           fullWidth
           sx={{ maxWidth: 320, flexGrow: 1 }}

@@ -343,7 +343,9 @@ export default function ProductsPage() {
           initialValue={initialSearch}
           onSearchChange={(value) => {
             setSearch(value);
-            setPage(1);
+            if (value !== "") {
+              setPage(1);
+            }
           }}
           sx={{ maxWidth: 320, flexGrow: 1 }}
         />
@@ -358,7 +360,6 @@ export default function ProductsPage() {
           </Button>
         </Stack>
       </Stack>
-
       <Popover
         open={filtersOpen}
         anchorEl={filterAnchorEl}
@@ -451,7 +452,6 @@ export default function ProductsPage() {
           </Button>
         </Box>
       </Popover>
-
       <CrudTable
         rows={products}
         columns={columns}
@@ -463,7 +463,6 @@ export default function ProductsPage() {
           setDeleteOpen(true);
         }}
       />
-
       <Stack mt={2} alignItems="center">
         <Pagination
           count={pages}
@@ -472,7 +471,6 @@ export default function ProductsPage() {
           color="primary"
         />
       </Stack>
-
       <ProductFormDialog
         open={formOpen}
         mode={formMode}
@@ -482,7 +480,6 @@ export default function ProductsPage() {
         onClose={() => setFormOpen(false)}
         onSaved={handleProductSaved}
       />
-
       <ConfirmDeleteDialog
         open={deleteOpen}
         title="Delete product"
