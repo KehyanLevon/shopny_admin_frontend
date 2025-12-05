@@ -1,14 +1,18 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Pagination,
+  Popover,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import axios from "axios";
 import {
   categoryApi,
   type CategoryDto,
@@ -22,6 +26,8 @@ import {
 } from "../../components/common/EntityFormDialog";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
+import { useSearchParams } from "react-router-dom";
+import { SearchInput } from "../../components/common/SearchInput";
 
 const ROWS_PER_PAGE = 10;
 
@@ -29,19 +35,57 @@ const buildInitialForm = (category: CategoryDto | null): CategoryPayload => ({
   title: category?.title ?? "",
   description: category?.description ?? "",
   isActive: category?.isActive ?? true,
-  sectionId: category?.sectionId,
+  sectionId: category?.sectionId ?? null,
 });
 
+type CategoryFieldName = keyof CategoryPayload;
+type CategoryErrors = Partial<Record<CategoryFieldName | "global", string[]>>;
+
 export default function CategoriesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+  const initialSectionIdParam = searchParams.get("sectionId");
+  const initialSectionId: number | "all" =
+    initialSectionIdParam != null
+      ? Number.isNaN(Number(initialSectionIdParam))
+        ? "all"
+        : Number(initialSectionIdParam)
+      : "all";
+  const initialStatus =
+    (searchParams.get("status") as "" | "active" | "inactive" | null) ?? "";
+
+  const [search, setSearch] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
+  const [pagesCount, setPagesCount] = useState(1);
+  const [total, setTotal] = useState(0);
+
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
-    "all"
+    initialSectionId
   );
+
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
+    initialStatus
+  );
+
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -53,12 +97,23 @@ export default function CategoriesPage() {
   );
   const [formSubmitting, setFormSubmitting] = useState(false);
 
+  const initialFormRef = useRef<CategoryPayload>(buildInitialForm(null));
+
+  const [formErrors, setFormErrors] = useState<CategoryErrors>({});
+  const [touchedFields, setTouchedFields] = useState<
+    Partial<Record<CategoryFieldName, boolean>>
+  >({});
+  const validationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CategoryDto | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadSections = async () => {
-    const res: any = await sectionApi.getAll();
+    const res: any = await sectionApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setSections(items);
   };
@@ -66,7 +121,10 @@ export default function CategoriesPage() {
   const loadCategories = async () => {
     setLoading(true);
     try {
-      const params: any = {};
+      const params: any = {
+        page,
+        limit: ROWS_PER_PAGE,
+      };
 
       if (selectedSectionId !== "all") {
         params.sectionId = selectedSectionId;
@@ -74,13 +132,22 @@ export default function CategoriesPage() {
 
       const term = search.trim();
       if (term) {
-        params.search = term;
         params.q = term;
+        params.search = term;
       }
 
-      const res: any = await categoryApi.getAll(params);
-      const items: CategoryDto[] = res?.data?.items ?? res?.data ?? res ?? [];
-      setCategories(items);
+      if (statusFilter === "active") {
+        params.isActive = true;
+      } else if (statusFilter === "inactive") {
+        params.isActive = false;
+      }
+
+      const res = await categoryApi.getAll(params);
+      const data: any = res.data;
+
+      setCategories(data.items ?? []);
+      setPagesCount(data.pages ?? 1);
+      setTotal(data.total ?? data.items?.length ?? 0);
     } finally {
       setLoading(false);
     }
@@ -92,24 +159,155 @@ export default function CategoriesPage() {
 
   useEffect(() => {
     void loadCategories();
-  }, [selectedSectionId, search]);
+  }, [selectedSectionId, statusFilter, search, page]);
+
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (selectedSectionId !== "all") {
+      params.sectionId = String(selectedSectionId);
+    }
+    if (statusFilter) {
+      params.status = statusFilter;
+    }
+
+    setSearchParams(params, { replace: true });
+  }, [page, search, selectedSectionId, statusFilter, setSearchParams]);
+
+  const validateCategory = (
+    values: CategoryPayload,
+    mode: "create" | "edit"
+  ): CategoryErrors => {
+    const errors: CategoryErrors = {};
+
+    const title = (values.title ?? "").trim();
+    if (!title) {
+      errors.title = ["Title is required."];
+    } else {
+      if (title.length < 2) {
+        errors.title = [
+          ...(errors.title ?? []),
+          "Title must be at least 2 characters long.",
+        ];
+      }
+      if (title.length > 255) {
+        errors.title = [
+          ...(errors.title ?? []),
+          "Title must not be longer than 255 characters.",
+        ];
+      }
+    }
+
+    const description = values.description ?? "";
+    if (description && description.length > 5000) {
+      errors.description = [
+        "Description must not be longer than 5000 characters.",
+      ];
+    }
+
+    const sectionId = values.sectionId;
+    if (mode === "create") {
+      if (sectionId === null || sectionId === undefined) {
+        errors.sectionId = ["Section is required."];
+      } else if (Number(sectionId) <= 0) {
+        errors.sectionId = ["sectionId must be a positive integer."];
+      }
+    } else {
+      if (sectionId !== null && sectionId !== undefined) {
+        if (Number(sectionId) <= 0) {
+          errors.sectionId = ["sectionId must be a positive integer."];
+        }
+      }
+    }
+
+    return errors;
+  };
+
+  useEffect(() => {
+    if (!formOpen) return;
+
+    if (validationTimerRef.current) {
+      clearTimeout(validationTimerRef.current);
+    }
+
+    validationTimerRef.current = setTimeout(() => {
+      const allErrors = validateCategory(formValues, formMode);
+
+      setFormErrors(() => {
+        const next: CategoryErrors = {};
+
+        (Object.keys(touchedFields) as CategoryFieldName[]).forEach((name) => {
+          if (allErrors[name]) {
+            next[name] = allErrors[name];
+          }
+        });
+
+        return next;
+      });
+    }, 300);
+
+    return () => {
+      if (validationTimerRef.current) {
+        clearTimeout(validationTimerRef.current);
+      }
+    };
+  }, [formValues, formMode, formOpen, touchedFields]);
+
+  const handleFieldBlur = (name: CategoryFieldName) => {
+    setTouchedFields((prev) => ({ ...prev, [name]: true }));
+    const allErrors = validateCategory(formValues, formMode);
+
+    setFormErrors((prev) => {
+      const next: CategoryErrors = { ...prev };
+      if (allErrors[name]) {
+        next[name] = allErrors[name];
+      } else {
+        delete next[name];
+      }
+      return next;
+    });
+  };
+
+  const resetFormState = (
+    mode: "create" | "edit",
+    category: CategoryDto | null
+  ) => {
+    setFormMode(mode);
+    setEditingCategory(category);
+    const initial = buildInitialForm(category);
+    setFormValues(initial);
+    initialFormRef.current = initial;
+    setFormErrors({});
+    setTouchedFields({});
+  };
 
   const handleOpenCreate = () => {
-    setFormMode("create");
-    setEditingCategory(null);
-    setFormValues(buildInitialForm(null));
+    resetFormState("create", null);
     setFormOpen(true);
   };
 
   const handleOpenEdit = (category: CategoryDto) => {
-    setFormMode("edit");
-    setEditingCategory(category);
-    setFormValues(buildInitialForm(category));
+    resetFormState("edit", category);
     setFormOpen(true);
   };
 
   const handleSubmitForm = async () => {
+    const allErrors = validateCategory(formValues, formMode);
+    if (Object.keys(allErrors).length > 0) {
+      setFormErrors(allErrors);
+      setTouchedFields({
+        title: true,
+        description: true,
+        sectionId: true,
+        isActive: true,
+      });
+      return;
+    }
+
     setFormSubmitting(true);
+    setFormErrors({});
     try {
       const payload: CategoryPayload = {
         ...formValues,
@@ -123,6 +321,41 @@ export default function CategoriesPage() {
       }
       setFormOpen(false);
       await loadCategories();
+    } catch (error: any) {
+      if (axios.isAxiosError(error)) {
+        const status = error.response?.status;
+        const data = error.response?.data as any;
+        if (status === 422 && data?.errors) {
+          const backendErrors: CategoryErrors = {};
+          Object.entries(
+            data.errors as Record<string, string[] | string>
+          ).forEach(([key, value]) => {
+            const messages = Array.isArray(value) ? value : [value];
+            if (
+              ["title", "description", "sectionId", "isActive"].includes(key)
+            ) {
+              (backendErrors as any)[key] = messages;
+            } else {
+              backendErrors.global = [
+                ...(backendErrors.global ?? []),
+                ...messages,
+              ];
+            }
+          });
+
+          setFormErrors(backendErrors);
+          return;
+        }
+        if (data?.message || data?.error) {
+          setFormErrors({
+            global: [data.message ?? data.error],
+          });
+          return;
+        }
+      }
+      setFormErrors({
+        global: ["Unexpected error occurred. Please try again."],
+      });
     } finally {
       setFormSubmitting(false);
     }
@@ -141,17 +374,6 @@ export default function CategoriesPage() {
     }
   };
 
-  const pageCount = Math.max(1, Math.ceil(categories.length / ROWS_PER_PAGE));
-  const currentPage = Math.min(page, pageCount);
-  const pagedRows = useMemo(
-    () =>
-      categories.slice(
-        (currentPage - 1) * ROWS_PER_PAGE,
-        currentPage * ROWS_PER_PAGE
-      ),
-    [categories, currentPage]
-  );
-
   const columns: CrudColumn<CategoryDto>[] = [
     {
       id: "title",
@@ -164,11 +386,6 @@ export default function CategoriesPage() {
       render: (row) => (
         <TruncatedTextWithTooltip text={row.description ?? ""} max={40} />
       ),
-    },
-    {
-      id: "slug",
-      label: "Slug",
-      render: (row) => <Chip label={row.slug} size="small" />,
     },
     {
       id: "section",
@@ -197,8 +414,21 @@ export default function CategoriesPage() {
   ];
 
   const formFields: FormFieldConfig<CategoryPayload>[] = [
-    { name: "title", label: "Title", type: "text", required: true },
-    { name: "description", label: "Description", type: "textarea" },
+    {
+      name: "title",
+      label: "Title",
+      type: "text",
+      required: true,
+      maxLength: 255,
+      showCounter: true,
+    },
+    {
+      name: "description",
+      label: "Description",
+      type: "textarea",
+      maxLength: 5000,
+      showCounter: true,
+    },
     {
       name: "sectionId",
       label: "Section",
@@ -207,27 +437,68 @@ export default function CategoriesPage() {
         value: s.id,
         label: s.title,
       })),
-      required: false,
+      required: formMode === "create",
     },
     { name: "isActive", label: "Active", type: "switch" },
   ];
 
-  const isFormValid = formValues.title.trim().length > 0;
+  const hasFieldErrors = Object.keys(formErrors).some(
+    (key) => key !== "global" && (formErrors as any)[key]?.length
+  );
+
+  const isDirty =
+    JSON.stringify(formValues) !== JSON.stringify(initialFormRef.current);
+
+  const isFormValid =
+    !hasFieldErrors &&
+    formValues.title.trim().length > 0 &&
+    (formMode !== "create" || !!formValues.sectionId) &&
+    isDirty;
+
+  const handleClearFilters = () => {
+    setSelectedSectionId("all");
+    setStatusFilter("");
+    setPage(1);
+  };
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Categories</Typography>
-        <Stack direction="row" gap={2} alignItems="center">
-          <TextField
-            size="small"
-            label="Search"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+        />
+
+        <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New Category
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={260}>
+          <Typography variant="subtitle1">Filters</Typography>
+
           <TextField
             select
             size="small"
@@ -238,7 +509,6 @@ export default function CategoriesPage() {
               setSelectedSectionId(value === "all" ? "all" : Number(value));
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all">All sections</MenuItem>
             {sections.map((s) => (
@@ -247,14 +517,30 @@ export default function CategoriesPage() {
               </MenuItem>
             ))}
           </TextField>
-          <Button variant="contained" onClick={handleOpenCreate}>
-            New Category
+
+          <TextField
+            select
+            size="small"
+            label="Active"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | "active" | "inactive");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="active">Only active</MenuItem>
+            <MenuItem value="inactive">Only inactive</MenuItem>
+          </TextField>
+
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
           </Button>
-        </Stack>
-      </Stack>
+        </Box>
+      </Popover>
 
       <CrudTable
-        rows={pagedRows}
+        rows={categories}
         columns={columns}
         loading={loading}
         emptyMessage="No categories."
@@ -267,11 +553,14 @@ export default function CategoriesPage() {
 
       <Stack mt={2} alignItems="center">
         <Pagination
-          count={pageCount}
-          page={currentPage}
+          count={pagesCount}
+          page={page}
           onChange={(_, value) => setPage(value)}
           color="primary"
         />
+        <Typography variant="body2" color="text.secondary" mt={1}>
+          Total: {total}
+        </Typography>
       </Stack>
 
       <EntityFormDialog<CategoryPayload>
@@ -285,6 +574,8 @@ export default function CategoriesPage() {
         onSubmit={handleSubmitForm}
         submitting={formSubmitting}
         isValid={isFormValid}
+        errors={formErrors}
+        onFieldBlur={handleFieldBlur}
       />
 
       <ConfirmDeleteDialog

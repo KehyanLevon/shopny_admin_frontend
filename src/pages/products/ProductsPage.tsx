@@ -1,16 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Pagination,
+  Popover,
   Stack,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import {
   productApi,
   type ProductDto,
@@ -19,30 +22,76 @@ import {
 import { sectionApi, type SectionDto } from "../../api/sectionApi";
 import { categoryApi, type CategoryDto } from "../../api/categoryApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
+import { SearchInput } from "../../components/common/SearchInput";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 import { ProductFormDialog } from "../../components/products/ProductFormDialog";
-
+import { useSearchParams } from "react-router-dom";
 const ROWS_PER_PAGE = 10;
 
 export default function ProductsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+
+  const initialSectionIdParam = searchParams.get("sectionId");
+  const initialSectionId: number | "all" =
+    initialSectionIdParam != null
+      ? Number.isNaN(Number(initialSectionIdParam))
+        ? "all"
+        : Number(initialSectionIdParam)
+      : "all";
+
+  const initialCategoryIdParam = searchParams.get("categoryId");
+  const initialCategoryId: number | "all" =
+    initialCategoryIdParam != null
+      ? Number.isNaN(Number(initialCategoryIdParam))
+        ? "all"
+        : Number(initialCategoryIdParam)
+      : "all";
+
+  const initialPriceSort =
+    (searchParams.get("priceSort") as "none" | "asc" | "desc" | null) ?? "none";
+
+  const initialStatusFilter =
+    (searchParams.get("status") as "" | "active" | "inactive" | null) ?? "";
+
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState(initialSearch);
+  const [page, setPage] = useState(initialPage);
   const [pages, setPages] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [_, setTotal] = useState(0);
 
   const [selectedSectionId, setSelectedSectionId] = useState<number | "all">(
-    "all"
+    initialSectionId
   );
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | "all">(
-    "all"
+    initialCategoryId
   );
-  const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">("none");
+  const [priceSort, setPriceSort] = useState<"none" | "asc" | "desc">(
+    initialPriceSort
+  );
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
+    initialStatusFilter
+  );
+
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
 
   const [formOpen, setFormOpen] = useState(false);
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
@@ -53,13 +102,19 @@ export default function ProductsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const loadSections = async () => {
-    const res: any = await sectionApi.getAll();
+    const res: any = await sectionApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setSections(items);
   };
 
   const loadCategories = async () => {
-    const res: any = await categoryApi.getAll();
+    const res: any = await categoryApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: CategoryDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setCategories(items);
   };
@@ -90,6 +145,12 @@ export default function ProductsPage() {
         params.sortDir = priceSort;
       }
 
+      if (statusFilter === "active") {
+        (params as any).isActive = true;
+      } else if (statusFilter === "inactive") {
+        (params as any).isActive = false;
+      }
+
       const res: any = await productApi.getAll(params);
       const data = res?.data ?? res;
 
@@ -118,7 +179,43 @@ export default function ProductsPage() {
 
   useEffect(() => {
     void loadProducts();
-  }, [page, search, selectedSectionId, selectedCategoryId, priceSort]);
+  }, [
+    page,
+    search,
+    selectedSectionId,
+    selectedCategoryId,
+    priceSort,
+    statusFilter,
+  ]);
+
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (selectedSectionId !== "all") {
+      params.sectionId = String(selectedSectionId);
+    }
+    if (selectedCategoryId !== "all") {
+      params.categoryId = String(selectedCategoryId);
+    }
+    if (priceSort !== "none") {
+      params.priceSort = priceSort;
+    }
+    if (statusFilter) {
+      params.status = statusFilter;
+    }
+
+    setSearchParams(params, { replace: true });
+  }, [
+    page,
+    search,
+    selectedSectionId,
+    selectedCategoryId,
+    priceSort,
+    statusFilter,
+    setSearchParams,
+  ]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -164,11 +261,6 @@ export default function ProductsPage() {
       ),
     },
     {
-      id: "slug",
-      label: "Slug",
-      render: (row) => <Chip label={row.slug} size="small" />,
-    },
-    {
       id: "price",
       label: "Price",
       align: "right",
@@ -205,7 +297,7 @@ export default function ProductsPage() {
       id: "status",
       label: "Status",
       render: (row) =>
-        row.isArchived ? (
+        (row as any).isArchived ? (
           <Chip label="Archived" color="default" size="small" />
         ) : row.isActive ? (
           <Chip label="Active" color="success" size="small" />
@@ -230,20 +322,53 @@ export default function ProductsPage() {
     },
   ];
 
+  const handleClearFilters = () => {
+    setSelectedSectionId("all");
+    setSelectedCategoryId("all");
+    setPriceSort("none");
+    setStatusFilter("");
+    setPage(1);
+  };
+
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Products</Typography>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+        />
+
         <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
-          <TextField
-            size="small"
-            label="Search"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New Product
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={280}>
+          <Typography variant="subtitle1">Filters</Typography>
+
           <TextField
             select
             size="small"
@@ -256,7 +381,6 @@ export default function ProductsPage() {
               setSelectedCategoryId("all");
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all">All sections</MenuItem>
             {sections.map((s) => (
@@ -265,6 +389,7 @@ export default function ProductsPage() {
               </MenuItem>
             ))}
           </TextField>
+
           <TextField
             select
             size="small"
@@ -276,7 +401,6 @@ export default function ProductsPage() {
               setSelectedCategoryId(parsed);
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all">All categories</MenuItem>
             {categories
@@ -290,6 +414,21 @@ export default function ProductsPage() {
                   {c.title}
                 </MenuItem>
               ))}
+          </TextField>
+
+          <TextField
+            select
+            size="small"
+            label="Active"
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as "" | "active" | "inactive");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="active">Only active</MenuItem>
+            <MenuItem value="inactive">Only inactive</MenuItem>
           </TextField>
 
           <ToggleButtonGroup
@@ -307,11 +446,11 @@ export default function ProductsPage() {
             <ToggleButton value="desc">Price ↓</ToggleButton>
           </ToggleButtonGroup>
 
-          <Button variant="contained" onClick={handleOpenCreate}>
-            New Product
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
           </Button>
-        </Stack>
-      </Stack>
+        </Box>
+      </Popover>
 
       <CrudTable
         rows={products}

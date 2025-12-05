@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import {
   EntityFormDialog,
   type FormFieldConfig,
@@ -28,6 +29,12 @@ interface PromoCodeFormState {
   categoryId: number | "";
   productId: number | "";
 }
+
+type PromoCodeFormErrors = Partial<
+  Record<keyof PromoCodeFormState | "global", string[]>
+>;
+
+type PromoCodeTouched = Partial<Record<keyof PromoCodeFormState, boolean>>;
 
 interface PromoCodeFormDialogProps {
   open: boolean;
@@ -83,6 +90,62 @@ const buildInitialForm = (promo: PromoCodeDto | null): PromoCodeFormState => {
   };
 };
 
+const validatePromo = (values: PromoCodeFormState): PromoCodeFormErrors => {
+  const errors: PromoCodeFormErrors = {};
+
+  const code = values.code.trim();
+  if (!code) {
+    errors.code = ["Code is required."];
+  } else if (code.length < 2) {
+    errors.code = ["Code must be at least 2 characters long."];
+  } else if (code.length > 64) {
+    errors.code = ["Code must not be longer than 64 characters."];
+  }
+
+  const description = values.description ?? "";
+  if (description.length > 5000) {
+    errors.description = [
+      "Description must not be longer than 5000 characters.",
+    ];
+  }
+
+  const discountStr = values.discountPercent.trim();
+  if (!discountStr) {
+    errors.discountPercent = ["Discount percent is required."];
+  } else {
+    const discountNum = Number(discountStr.replace(",", "."));
+    if (Number.isNaN(discountNum)) {
+      errors.discountPercent = ["Discount percent must be a number."];
+    } else if (discountNum < 0 || discountNum > 100) {
+      errors.discountPercent = ["Discount percent must be between 0 and 100."];
+    }
+  }
+
+  if (!values.scopeType) {
+    errors.scopeType = ["Scope type is required."];
+  } else if (values.scopeType === "section" && !values.sectionId) {
+    errors.scopeType = ["Section is required for this scope."];
+  } else if (values.scopeType === "category" && !values.categoryId) {
+    errors.scopeType = ["Category is required for this scope."];
+  } else if (values.scopeType === "product" && !values.productId) {
+    errors.scopeType = ["Product is required for this scope."];
+  }
+
+  if (values.startsAt && values.expiresAt) {
+    const start = new Date(values.startsAt);
+    const end = new Date(values.expiresAt);
+    if (
+      !Number.isNaN(start.getTime()) &&
+      !Number.isNaN(end.getTime()) &&
+      end < start
+    ) {
+      errors.expiresAt = ["Expires at must be after or equal to Starts at."];
+    }
+  }
+
+  return errors;
+};
+
 export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
   open,
   mode,
@@ -94,11 +157,20 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
   onSaved,
 }) => {
   const [form, setForm] = useState<PromoCodeFormState>(buildInitialForm(promo));
+  const [initialForm, setInitialForm] = useState<PromoCodeFormState>(
+    buildInitialForm(promo)
+  );
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<PromoCodeFormErrors>({});
+  const [touched, setTouched] = useState<PromoCodeTouched>({});
 
   useEffect(() => {
     if (open) {
-      setForm(buildInitialForm(promo));
+      const init = buildInitialForm(promo);
+      setForm(init);
+      setInitialForm(init);
+      setErrors({});
+      setTouched({});
     }
   }, [open, promo, mode]);
 
@@ -137,6 +209,9 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
         name: "description",
         label: "Description",
         type: "textarea",
+        rows: 4,
+        maxLength: 5000,
+        showCounter: true,
       },
       {
         name: "scopeType",
@@ -165,34 +240,73 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
     []
   );
 
-  const discountNum = Number(form.discountPercent.replace(",", "."));
-  const isDiscountValid =
-    !form.discountPercent.trim() ||
-    (!Number.isNaN(discountNum) && discountNum >= 0 && discountNum <= 100);
+  const handleFormChange = (next: PromoCodeFormState) => {
+    setForm(next);
 
-  const isScopeValid =
-    form.scopeType === "all" ||
-    (form.scopeType === "section" && !!form.sectionId) ||
-    (form.scopeType === "category" && !!form.categoryId) ||
-    (form.scopeType === "product" && !!form.productId);
+    const allErrors = validatePromo(next);
+    setErrors((prev) => {
+      const res: PromoCodeFormErrors = { ...prev };
+      (Object.keys(touched) as (keyof PromoCodeFormState)[]).forEach((key) => {
+        if (touched[key]) {
+          if (allErrors[key]?.length) {
+            res[key] = allErrors[key];
+          } else {
+            delete res[key];
+          }
+        }
+      });
+      return res;
+    });
+  };
 
-  const isValid =
-    form.code.trim().length > 0 &&
-    form.scopeType !== undefined &&
-    isDiscountValid &&
-    isScopeValid;
+  const handleFieldBlur = (name: keyof PromoCodeFormState) => {
+    setTouched((prev) => ({ ...prev, [name]: true }));
+    const allErrors = validatePromo(form);
+
+    setErrors((prev) => {
+      const next: PromoCodeFormErrors = { ...prev };
+
+      if (allErrors[name]?.length) {
+        next[name] = allErrors[name];
+      } else {
+        delete next[name];
+      }
+
+      return next;
+    });
+  };
+
+  const clientErrors = validatePromo(form);
+  const hasClientErrors = Object.keys(clientErrors).length > 0;
+
+  const hasFieldErrorsFromState = Object.entries(errors).some(
+    ([key, val]) =>
+      key !== "global" && Array.isArray(val) && (val as string[]).length > 0
+  );
+
+  const isFormValid = !hasClientErrors && !hasFieldErrorsFromState;
+  const hasChanges = JSON.stringify(form) !== JSON.stringify(initialForm);
 
   const handleSave = async () => {
+    const localErrors = validatePromo(form);
+    if (Object.keys(localErrors).length > 0) {
+      setErrors((prev) => ({ ...prev, ...localErrors }));
+      setTouched({
+        code: true,
+        description: true,
+        scopeType: true,
+        discountPercent: true,
+        startsAt: true,
+        expiresAt: true,
+        sectionId: true,
+        categoryId: true,
+        productId: true,
+      });
+      return;
+    }
+
     const trimmedCode = form.code.trim();
     const discountNum = Number(form.discountPercent.replace(",", "."));
-
-    if (!trimmedCode || !isDiscountValid || Number.isNaN(discountNum)) {
-      return;
-    }
-
-    if (!isScopeValid) {
-      return;
-    }
 
     const basePayload = {
       code: trimmedCode,
@@ -223,6 +337,7 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
     }
 
     setSaving(true);
+    setErrors({});
     try {
       let res;
       if (mode === "edit" && promo) {
@@ -236,6 +351,32 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
 
       onSaved(res.data);
       onClose();
+    } catch (error: any) {
+      if (axios.isAxiosError(error) && error.response) {
+        const { status, data } = error.response as {
+          status: number;
+          data: any;
+        };
+
+        if (status === 422 || status === 400) {
+          const backendErrors: PromoCodeFormErrors = data?.errors ?? {};
+          if (!backendErrors.global && data?.message) {
+            backendErrors.global = [data.message];
+          }
+          if (!backendErrors.global && data?.error) {
+            backendErrors.global = [data.error];
+          }
+          setErrors(backendErrors);
+        } else {
+          setErrors({
+            global: ["Unexpected error. Please try again later."],
+          });
+        }
+      } else {
+        setErrors({
+          global: ["Unexpected error. Please try again later."],
+        });
+      }
     } finally {
       setSaving(false);
     }
@@ -256,6 +397,23 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
       ? null
       : products.find((p) => p.id === form.productId) ?? null;
 
+  const discountNum = Number(form.discountPercent.replace(",", "."));
+  const isDiscountValid =
+    !form.discountPercent.trim() ||
+    (!Number.isNaN(discountNum) && discountNum >= 0 && discountNum <= 100);
+
+  const isScopeValid =
+    form.scopeType === "all" ||
+    (form.scopeType === "section" && !!form.sectionId) ||
+    (form.scopeType === "category" && !!form.categoryId) ||
+    (form.scopeType === "product" && !!form.productId);
+
+  const startsAtErrors = errors.startsAt;
+  const startsAtErrorText = startsAtErrors?.join(" ") ?? "";
+
+  const expiresAtErrors = errors.expiresAt;
+  const expiresAtErrorText = expiresAtErrors?.join(" ") ?? "";
+
   return (
     <EntityFormDialog<PromoCodeFormState>
       open={open}
@@ -263,11 +421,13 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
       title="Promo code"
       fields={fields}
       values={form}
-      onChange={setForm}
+      onChange={handleFormChange}
       onClose={onClose}
       onSubmit={handleSave}
       submitting={saving}
-      isValid={isValid}
+      isValid={isFormValid && hasChanges}
+      errors={errors}
+      onFieldBlur={handleFieldBlur}
     >
       <Stack spacing={2} mt={2}>
         {form.scopeType === "section" && (
@@ -353,6 +513,9 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
             onChange={(e) =>
               setForm((prev) => ({ ...prev, startsAt: e.target.value }))
             }
+            onBlur={() => handleFieldBlur("startsAt")}
+            error={!!startsAtErrors}
+            helperText={startsAtErrorText || " "}
           />
           <TextField
             label="Expires at"
@@ -364,6 +527,9 @@ export const PromoCodeFormDialog: React.FC<PromoCodeFormDialogProps> = ({
             onChange={(e) =>
               setForm((prev) => ({ ...prev, expiresAt: e.target.value }))
             }
+            onBlur={() => handleFieldBlur("expiresAt")}
+            error={!!expiresAtErrors}
+            helperText={expiresAtErrorText || " "}
           />
         </Stack>
 

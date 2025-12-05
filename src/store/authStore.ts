@@ -11,51 +11,41 @@ export interface AuthUser {
 }
 
 interface AuthState {
-  token: string | null;
   user: AuthUser | null;
   loading: boolean;
   initialized: boolean;
-  initFromStorage: () => Promise<void>;
+  initFromCookies: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  logoutFromOtherTab: () => void;
 }
-
 const isAdmin = (user: AuthUser | null) =>
   !!user?.roles?.includes("ROLE_ADMIN");
 
+export const AUTH_EVENT_KEY = "shopny_auth_event";
+
 export const useAuthStore = create<AuthState>((set, get) => ({
-  token: null,
   user: null,
   loading: false,
   initialized: false,
 
-  async initFromStorage() {
-    if (get().initialized) return;
+  async initFromCookies() {
+    const { initialized } = get();
+    if (initialized) return;
 
-    const storedToken = localStorage.getItem("accessToken");
-    if (!storedToken) {
-      set({ initialized: true });
-      return;
-    }
-
-    authApi.setAuthToken(storedToken);
-    set({ token: storedToken, loading: true });
+    set({ loading: true });
 
     try {
       const res = await authApi.me();
-      const user = res.data;
+      const user = res.data as AuthUser;
 
       if (!isAdmin(user)) {
-        localStorage.removeItem("accessToken");
-        authApi.setAuthToken(null);
-        set({ token: null, user: null });
+        set({ user: null });
       } else {
         set({ user });
       }
     } catch {
-      localStorage.removeItem("accessToken");
-      authApi.setAuthToken(null);
-      set({ token: null, user: null });
+      set({ user: null });
     } finally {
       set({ loading: false, initialized: true });
     }
@@ -64,31 +54,56 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   async login(email: string, password: string) {
     set({ loading: true });
     try {
-      const res = await authApi.login({ email, password });
-      const token = res.data.token;
-
-      localStorage.setItem("accessToken", token);
-      authApi.setAuthToken(token);
-
+      await authApi.login({ email, password });
       const meRes = await authApi.me();
-      const user = meRes.data;
+      const user = meRes.data as AuthUser;
 
       if (!isAdmin(user)) {
-        localStorage.removeItem("accessToken");
-        authApi.setAuthToken(null);
-        set({ token: null, user: null });
+        try {
+          if (authApi.logout) {
+            await authApi.logout();
+          }
+        } catch {}
+
+        set({ user: null });
         throw new Error("ACCESS_DENIED");
       }
-
-      set({ token, user });
+      set({ user, initialized: true });
+      try {
+        window.localStorage.setItem(
+          AUTH_EVENT_KEY,
+          JSON.stringify({
+            type: "login",
+            ts: Date.now(),
+          })
+        );
+      } catch {}
     } finally {
       set({ loading: false });
     }
   },
 
-  logout() {
-    localStorage.removeItem("accessToken");
-    authApi.setAuthToken(null);
-    set({ token: null, user: null });
+  async logout() {
+    set({ loading: true });
+    try {
+      if (authApi.logout) {
+        await authApi.logout();
+      }
+    } catch {
+    } finally {
+      set({ user: null, initialized: false, loading: false });
+      try {
+        window.localStorage.setItem(
+          AUTH_EVENT_KEY,
+          JSON.stringify({
+            type: "logout",
+            ts: Date.now(),
+          })
+        );
+      } catch {}
+    }
+  },
+  logoutFromOtherTab() {
+    set({ user: null, initialized: false });
   },
 }));

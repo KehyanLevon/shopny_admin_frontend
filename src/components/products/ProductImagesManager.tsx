@@ -27,6 +27,7 @@ const buildImageUrl = (src: string) => {
   if (src.startsWith("http://") || src.startsWith("https://")) {
     return src;
   }
+
   return `${API_BASE_URL}${src}`;
 };
 
@@ -44,7 +45,7 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   const handleSelectFiles = () => {
     inputRef.current?.click();
@@ -58,6 +59,7 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
     try {
       const fileArray = Array.from(files);
       const dataUrls = await Promise.all(fileArray.map(fileToDataUrl));
+
       onChange([...images, ...dataUrls]);
     } finally {
       setUploading(false);
@@ -66,10 +68,10 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
   };
 
   const handleDelete = (path: string) => {
-    setDeleting(path);
+    setDeletingKey(path);
     const updated = images.filter((img) => img !== path);
     onChange(updated);
-    setDeleting(null);
+    setDeletingKey(null);
   };
 
   return (
@@ -142,9 +144,9 @@ export const ProductImagesManager: React.FC<ProductImagesManagerProps> = ({
                   "&:hover": { background: "rgba(0,0,0,0.6)" },
                 }}
                 onClick={() => handleDelete(img)}
-                disabled={deleting === img}
+                disabled={deletingKey === img}
               >
-                {deleting === img ? (
+                {deletingKey === img ? (
                   <CircularProgress size={16} color="inherit" />
                 ) : (
                   <DeleteIcon fontSize="small" />

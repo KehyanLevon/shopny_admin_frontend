@@ -1,14 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
   Chip,
+  IconButton,
   MenuItem,
   Pagination,
+  Popover,
   Stack,
   TextField,
   Typography,
 } from "@mui/material";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import {
   promoCodesApi,
   type PromoCodeDto,
@@ -20,7 +23,9 @@ import { productApi, type ProductDto } from "../../api/productApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
+import { SearchInput } from "../../components/common/SearchInput";
 import { PromoCodeFormDialog } from "../../components/promocodes/PromoCodeFormDialog";
+import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
 
@@ -47,24 +52,55 @@ const formatDateTime = (value: string | null): string => {
 };
 
 export default function PromoCodesPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialSearch = searchParams.get("search") ?? "";
+  const initialPage = (() => {
+    const p = Number(searchParams.get("page") || "1");
+    return Number.isNaN(p) || p < 1 ? 1 : p;
+  })();
+
+  const initialScope =
+    (searchParams.get("scope") as PromoScopeType | "all-scopes" | null) ??
+    "all-scopes";
+
+  const initialIsActive =
+    (searchParams.get("active") as "" | "active" | "inactive" | null) ?? "";
+  const initialExpired =
+    (searchParams.get("expired") as "" | "expired" | "not-expired" | null) ??
+    "";
+
+  const initialSortBy =
+    (searchParams.get("sortBy") as
+      | "createdAt"
+      | "startsAt"
+      | "expiresAt"
+      | null) ?? "createdAt";
+  const initialSortDir =
+    (searchParams.get("sortDir") as "asc" | "desc" | null) ?? "desc";
+
   const [promoCodes, setPromoCodes] = useState<PromoCodeDto[]>([]);
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [scopeFilter, setScopeFilter] = useState<PromoScopeType | "all-scopes">(
-    "all-scopes"
+    initialScope
   );
   const [isActiveFilter, setIsActiveFilter] = useState<
     "" | "active" | "inactive"
-  >("");
+  >(initialIsActive);
   const [expiredFilter, setExpiredFilter] = useState<
     "" | "expired" | "not-expired"
-  >("");
+  >(initialExpired);
 
-  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<"createdAt" | "startsAt" | "expiresAt">(
+    initialSortBy
+  );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">(initialSortDir);
+
+  const [page, setPage] = useState(initialPage);
   const [total, setTotal] = useState(0);
   const [limit, setLimit] = useState(ROWS_PER_PAGE);
 
@@ -76,20 +112,40 @@ export default function PromoCodesPage() {
   const [deleteTarget, setDeleteTarget] = useState<PromoCodeDto | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
+    null
+  );
+  const filtersOpen = Boolean(filterAnchorEl);
+  const handleOpenFilters = (event: MouseEvent<HTMLElement>) => {
+    setFilterAnchorEl(event.currentTarget);
+  };
+  const handleCloseFilters = () => {
+    setFilterAnchorEl(null);
+  };
+
   const loadSections = async () => {
-    const res: any = await sectionApi.getAll();
+    const res: any = await sectionApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: SectionDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setSections(items);
   };
 
   const loadCategories = async () => {
-    const res: any = await categoryApi.getAll();
+    const res: any = await categoryApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: CategoryDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setCategories(items);
   };
 
   const loadProducts = async () => {
-    const res: any = await productApi.getAll();
+    const res: any = await productApi.getAll({
+      all: true,
+      fields: "id,title",
+    });
     const items: ProductDto[] = res?.data?.items ?? res?.data ?? res ?? [];
     setProducts(items);
   };
@@ -101,6 +157,8 @@ export default function PromoCodesPage() {
         page,
         limit: ROWS_PER_PAGE,
         search: search.trim() || undefined,
+        sortBy,
+        sortDir,
       };
 
       if (scopeFilter !== "all-scopes") {
@@ -137,9 +195,40 @@ export default function PromoCodesPage() {
 
   useEffect(() => {
     void loadPromoCodes();
-  }, [page, search, scopeFilter, isActiveFilter, expiredFilter]);
+  }, [
+    page,
+    search,
+    scopeFilter,
+    isActiveFilter,
+    expiredFilter,
+    sortBy,
+    sortDir,
+  ]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
+
+  useEffect(() => {
+    const params: Record<string, string> = {};
+
+    if (page !== 1) params.page = String(page);
+    if (search.trim()) params.search = search.trim();
+    if (scopeFilter !== "all-scopes") params.scope = scopeFilter;
+    if (isActiveFilter) params.active = isActiveFilter;
+    if (expiredFilter) params.expired = expiredFilter;
+    if (sortBy !== "createdAt") params.sortBy = sortBy;
+    if (sortDir !== "desc") params.sortDir = sortDir;
+
+    setSearchParams(params, { replace: true });
+  }, [
+    page,
+    search,
+    scopeFilter,
+    isActiveFilter,
+    expiredFilter,
+    sortBy,
+    sortDir,
+    setSearchParams,
+  ]);
 
   const handleOpenCreate = () => {
     setFormMode("create");
@@ -206,6 +295,11 @@ export default function PromoCodesPage() {
         ),
     },
     {
+      id: "startsAt",
+      label: "Starts at",
+      render: (row) => formatDateTime(row.startsAt ?? null),
+    },
+    {
       id: "expiresAt",
       label: "Expires at",
       render: (row) => {
@@ -221,22 +315,60 @@ export default function PromoCodesPage() {
         );
       },
     },
+    {
+      id: "createdAt",
+      label: "Created at",
+      render: (row) => formatDateTime((row as any).createdAt ?? null),
+    },
   ];
+
+  const handleClearFilters = () => {
+    setScopeFilter("all-scopes");
+    setIsActiveFilter("");
+    setExpiredFilter("");
+    setSortBy("createdAt");
+    setSortDir("desc");
+    setPage(1);
+  };
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <Typography variant="h5">Promo codes</Typography>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        mb={2}
+        gap={2}
+        alignItems="center"
+      >
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
+          sx={{ maxWidth: 320, flexGrow: 1 }}
+        />
+
         <Stack direction="row" gap={2} alignItems="center" flexWrap="wrap">
-          <TextField
-            size="small"
-            label="Search"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-          />
+          <IconButton onClick={handleOpenFilters}>
+            <FilterListIcon />
+          </IconButton>
+
+          <Button variant="contained" onClick={handleOpenCreate}>
+            New promo code
+          </Button>
+        </Stack>
+      </Stack>
+
+      <Popover
+        open={filtersOpen}
+        anchorEl={filterAnchorEl}
+        onClose={handleCloseFilters}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Box p={2} display="flex" flexDirection="column" gap={2} minWidth={280}>
+          <Typography variant="subtitle1">Filters & sorting</Typography>
 
           <TextField
             select
@@ -248,7 +380,6 @@ export default function PromoCodesPage() {
               setScopeFilter(val);
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="all-scopes">All scopes</MenuItem>
             <MenuItem value="all">All products</MenuItem>
@@ -267,7 +398,6 @@ export default function PromoCodesPage() {
               setIsActiveFilter(val);
               setPage(1);
             }}
-            sx={{ minWidth: 140 }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="active">Only active</MenuItem>
@@ -284,18 +414,48 @@ export default function PromoCodesPage() {
               setExpiredFilter(val);
               setPage(1);
             }}
-            sx={{ minWidth: 160 }}
           >
             <MenuItem value="">All</MenuItem>
             <MenuItem value="not-expired">Only valid / no date</MenuItem>
             <MenuItem value="expired">Only expired</MenuItem>
           </TextField>
 
-          <Button variant="contained" onClick={handleOpenCreate}>
-            New promo code
+          <TextField
+            select
+            size="small"
+            label="Sort by"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(
+                e.target.value as "createdAt" | "startsAt" | "expiresAt"
+              );
+              setPage(1);
+            }}
+          >
+            <MenuItem value="createdAt">Created at</MenuItem>
+            <MenuItem value="startsAt">Starts at</MenuItem>
+            <MenuItem value="expiresAt">Expires at</MenuItem>
+          </TextField>
+
+          <TextField
+            select
+            size="small"
+            label="Sort direction"
+            value={sortDir}
+            onChange={(e) => {
+              setSortDir(e.target.value as "asc" | "desc");
+              setPage(1);
+            }}
+          >
+            <MenuItem value="desc">Descending</MenuItem>
+            <MenuItem value="asc">Ascending</MenuItem>
+          </TextField>
+
+          <Button size="small" onClick={handleClearFilters}>
+            Clear filters
           </Button>
-        </Stack>
-      </Stack>
+        </Box>
+      </Popover>
 
       <CrudTable<PromoCodeDto>
         rows={promoCodes}

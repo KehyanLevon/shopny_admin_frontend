@@ -28,6 +28,8 @@ export interface SectionListParams {
   page?: number;
   limit?: number;
   q?: string;
+  all?: boolean;
+  fields?: string;
 }
 
 export const sectionApi = {
