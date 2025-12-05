@@ -17,10 +17,12 @@ interface AuthState {
   initFromCookies: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  logoutFromOtherTab: () => void;
 }
-
 const isAdmin = (user: AuthUser | null) =>
   !!user?.roles?.includes("ROLE_ADMIN");
+
+export const AUTH_EVENT_KEY = "shopny_auth_event";
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
@@ -66,8 +68,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         set({ user: null });
         throw new Error("ACCESS_DENIED");
       }
-
       set({ user, initialized: true });
+      try {
+        window.localStorage.setItem(
+          AUTH_EVENT_KEY,
+          JSON.stringify({
+            type: "login",
+            ts: Date.now(),
+          })
+        );
+      } catch {}
     } finally {
       set({ loading: false });
     }
@@ -82,6 +92,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     } catch {
     } finally {
       set({ user: null, initialized: false, loading: false });
+      try {
+        window.localStorage.setItem(
+          AUTH_EVENT_KEY,
+          JSON.stringify({
+            type: "logout",
+            ts: Date.now(),
+          })
+        );
+      } catch {}
     }
+  },
+  logoutFromOtherTab() {
+    set({ user: null, initialized: false });
   },
 }));
