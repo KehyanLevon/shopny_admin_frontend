@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
@@ -24,6 +24,7 @@ import {
   type FormFieldConfig,
 } from "../../components/common/EntityFormDialog";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
+import { SearchInput } from "../../components/common/SearchInput";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 import { useSearchParams } from "react-router-dom";
 
@@ -55,7 +56,6 @@ export default function SectionsPage() {
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
   const [page, setPage] = useState(initialPage);
   const [pagesCount, setPagesCount] = useState(1);
@@ -120,21 +120,10 @@ export default function SectionsPage() {
     }
   };
 
-  // дебаунс поиска
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 400);
-
-    return () => window.clearTimeout(id);
-  }, [searchInput]);
-
   useEffect(() => {
     void loadSections();
   }, [page, search, statusFilter]);
 
-  // 🔗 Синхронизация с URL
   useEffect(() => {
     const params: Record<string, string> = {};
 
@@ -351,15 +340,14 @@ export default function SectionsPage() {
         gap={2}
         alignItems="center"
       >
-        <TextField
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
+          }}
           fullWidth
           sx={{ maxWidth: 320, flexGrow: 1 }}
-          size="small"
-          label="Search"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value);
-          }}
         />
 
         <Stack direction="row" gap={2} alignItems="center">

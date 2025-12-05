@@ -14,6 +14,7 @@ import {
 import FilterListIcon from "@mui/icons-material/FilterList";
 import { usersApi, type UserDto } from "../../api/usersApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
+import { SearchInput } from "../../components/common/SearchInput";
 import { useSearchParams } from "react-router-dom";
 
 const ROWS_PER_PAGE = 10;
@@ -49,9 +50,7 @@ export default function UsersPage() {
   const [users, setUsers] = useState<UserDto[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [page, setPage] = useState(initialPage);
   const [pages, setPages] = useState(1);
@@ -122,24 +121,6 @@ export default function UsersPage() {
       setLoading(false);
     }
   };
-
-  // 🔍 debounce search
-  useEffect(() => {
-    if (searchTimerRef.current) {
-      clearTimeout(searchTimerRef.current);
-    }
-
-    searchTimerRef.current = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 400);
-
-    return () => {
-      if (searchTimerRef.current) {
-        clearTimeout(searchTimerRef.current);
-      }
-    };
-  }, [searchInput]);
 
   useEffect(() => {
     void loadUsers();
@@ -221,12 +202,11 @@ export default function UsersPage() {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" mb={2} gap={2}>
-        <TextField
-          size="small"
-          label="Search"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value);
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
           }}
         />
         <Stack direction="row" gap={2} alignItems="center">

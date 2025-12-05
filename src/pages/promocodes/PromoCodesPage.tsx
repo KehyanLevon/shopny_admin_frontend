@@ -1,5 +1,3 @@
-// Весь файл такой же как у тебя, только добавлены useSearchParams + инициализация и эффект
-
 import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
@@ -25,6 +23,7 @@ import { productApi, type ProductDto } from "../../api/productApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
+import { SearchInput } from "../../components/common/SearchInput";
 import { PromoCodeFormDialog } from "../../components/promocodes/PromoCodeFormDialog";
 import { useSearchParams } from "react-router-dom";
 
@@ -85,10 +84,7 @@ export default function PromoCodesPage() {
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [products, setProducts] = useState<ProductDto[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
-
   const [scopeFilter, setScopeFilter] = useState<PromoScopeType | "all-scopes">(
     initialScope
   );
@@ -189,15 +185,6 @@ export default function PromoCodesPage() {
   }, []);
 
   useEffect(() => {
-    const id = window.setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 400);
-
-    return () => window.clearTimeout(id);
-  }, [searchInput]);
-
-  useEffect(() => {
     void loadPromoCodes();
   }, [
     page,
@@ -211,7 +198,6 @@ export default function PromoCodesPage() {
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
-  // 🔗 Синхронизация с URL
   useEffect(() => {
     const params: Record<string, string> = {};
 
@@ -345,12 +331,11 @@ export default function PromoCodesPage() {
         gap={2}
         alignItems="center"
       >
-        <TextField
-          size="small"
-          label="Search"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value);
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
           }}
           sx={{ maxWidth: 320, flexGrow: 1 }}
         />

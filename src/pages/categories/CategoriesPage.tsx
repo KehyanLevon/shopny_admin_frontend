@@ -27,6 +27,7 @@ import {
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 import { useSearchParams } from "react-router-dom";
+import { SearchInput } from "../../components/common/SearchInput";
 
 const ROWS_PER_PAGE = 10;
 
@@ -62,7 +63,6 @@ export default function CategoriesPage() {
   const initialStatus =
     (searchParams.get("status") as "" | "active" | "inactive" | null) ?? "";
 
-  const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
   const [page, setPage] = useState(initialPage);
   const [pagesCount, setPagesCount] = useState(1);
@@ -72,12 +72,10 @@ export default function CategoriesPage() {
     initialSectionId
   );
 
-  // фильтр активности
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">(
     initialStatus
   );
 
-  // Popover
   const [filterAnchorEl, setFilterAnchorEl] = useState<HTMLElement | null>(
     null
   );
@@ -152,16 +150,6 @@ export default function CategoriesPage() {
     }
   };
 
-  // дебаунс поиска
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setSearch(searchInput.trim());
-      setPage(1);
-    }, 400);
-
-    return () => clearTimeout(id);
-  }, [searchInput]);
-
   useEffect(() => {
     void loadSections();
   }, []);
@@ -170,7 +158,6 @@ export default function CategoriesPage() {
     void loadCategories();
   }, [selectedSectionId, statusFilter, search, page]);
 
-  // 🔗 Синхронизация с URL
   useEffect(() => {
     const params: Record<string, string> = {};
 
@@ -480,12 +467,11 @@ export default function CategoriesPage() {
         gap={2}
         alignItems="center"
       >
-        <TextField
-          size="small"
-          label="Search"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value);
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
           }}
           sx={{ maxWidth: 320, flexGrow: 1 }}
         />

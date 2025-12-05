@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   Box,
   Button,
@@ -22,11 +22,11 @@ import {
 import { sectionApi, type SectionDto } from "../../api/sectionApi";
 import { categoryApi, type CategoryDto } from "../../api/categoryApi";
 import { CrudTable, type CrudColumn } from "../../components/common/CrudTable";
+import { SearchInput } from "../../components/common/SearchInput";
 import { ConfirmDeleteDialog } from "../../components/common/ConfirmDeleteDialog";
 import { TruncatedTextWithTooltip } from "../../components/common/TruncatedTextWithTooltip";
 import { ProductFormDialog } from "../../components/products/ProductFormDialog";
 import { useSearchParams } from "react-router-dom";
-
 const ROWS_PER_PAGE = 10;
 
 export default function ProductsPage() {
@@ -64,11 +64,7 @@ export default function ProductsPage() {
   const [sections, setSections] = useState<SectionDto[]>([]);
   const [categories, setCategories] = useState<CategoryDto[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
-  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [page, setPage] = useState(initialPage);
   const [pages, setPages] = useState(1);
   const [_, setTotal] = useState(0);
@@ -170,24 +166,6 @@ export default function ProductsPage() {
     }
   };
 
-  // дебаунс поиска
-  useEffect(() => {
-    if (searchTimerRef.current) {
-      clearTimeout(searchTimerRef.current);
-    }
-
-    searchTimerRef.current = setTimeout(() => {
-      setSearch(searchInput);
-      setPage(1);
-    }, 400);
-
-    return () => {
-      if (searchTimerRef.current) {
-        clearTimeout(searchTimerRef.current);
-      }
-    };
-  }, [searchInput]);
-
   useEffect(() => {
     void loadSections();
     void loadCategories();
@@ -204,7 +182,6 @@ export default function ProductsPage() {
     statusFilter,
   ]);
 
-  // 🔗 Синхронизация с URL
   useEffect(() => {
     const params: Record<string, string> = {};
 
@@ -356,12 +333,11 @@ export default function ProductsPage() {
         gap={2}
         alignItems="center"
       >
-        <TextField
-          size="small"
-          label="Search"
-          value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value);
+        <SearchInput
+          initialValue={initialSearch}
+          onSearchChange={(value) => {
+            setSearch(value);
+            setPage(1);
           }}
           sx={{ maxWidth: 320, flexGrow: 1 }}
         />
